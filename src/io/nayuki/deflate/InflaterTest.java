@@ -6,6 +6,8 @@
  * https://www.nayuki.io/page/fast-deflate-implementation
  */
 
+package io.nayuki.deflate;
+
 import static org.junit.Assert.assertArrayEquals;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;

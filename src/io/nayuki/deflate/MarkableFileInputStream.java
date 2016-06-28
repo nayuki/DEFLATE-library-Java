@@ -6,6 +6,8 @@
  * https://www.nayuki.io/page/fast-deflate-implementation
  */
 
+package io.nayuki.deflate;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
