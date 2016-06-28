@@ -42,10 +42,6 @@ public final class Inflater {
 	private static final int OUTPUT_BUFFER_SIZE = 64 * 1024;  // Must be at least 65535 to accommodate uncompressed blocks (configurable)
 	private byte[] tempOutputBuffer;  // Only used within decompressUncompressedBlock() and decompressHuffmanBlock(); invalid data outside of these function calls
 	
-	// Output statistics
-	private long outputLength;
-	private int outputCrc32;
-	
 	
 	
 	/* Public main methods */
@@ -73,23 +69,10 @@ public final class Inflater {
 		assert OUTPUT_BUFFER_SIZE >= 65535;
 		tempOutputBuffer = new byte[OUTPUT_BUFFER_SIZE];
 		
-		outputLength = 0;
-		outputCrc32 = 0xFFFFFFFF;
-		
 		// Start decompressing immediately
 		decompressStream();
 	}
 	
-	
-	
-	public long getLength() {
-		return outputLength;
-	}
-	
-	
-	public int getCrc32() {
-		return ~outputCrc32;
-	}
 	
 	
 	/* Main decompression methods */
@@ -617,14 +600,6 @@ public final class Inflater {
 		// Write to underlying stream, update total length
 		byte[] b = tempOutputBuffer;
 		output.write(b, 0, len);
-		outputLength += len;
-		assert (outputLength & DICTIONARY_SIZE_MASK) == dictionaryIndex;
-		
-		// Update CRC-32 hash
-		int crc = outputCrc32;
-		for (int i = 0; i < len; i++)
-			crc = (crc >>> 8) ^ CRC32_XOR_TABLE[(crc ^ b[i]) & 0xFF];
-		outputCrc32 = crc;
 	}
 	
 	
@@ -635,7 +610,6 @@ public final class Inflater {
 	
 	private static final short[] FIXED_LITERAL_LENGTH_CODE_TREE;
 	private static final short[] FIXED_DISTANCE_CODE_TREE;
-	private static final int[] CRC32_XOR_TABLE;
 	
 	static {
 		// Fixed Huffman code trees (for block type 1)
@@ -652,16 +626,6 @@ public final class Inflater {
 			FIXED_DISTANCE_CODE_TREE = codeLengthsToCodeTree(distcodelens);
 		} catch (DataFormatException e) {
 			throw new AssertionError(e);
-		}
-		
-		// CRC-32 table
-		CRC32_XOR_TABLE = new int[256];
-		final int POLYNOMIAL = 0xEDB88320;
-		for (int i = 0; i < 256; i++) {
-			int reg = i;
-			for (int j = 0; j < 8; j++)
-				reg = (reg >>> 1) ^ ((reg & 1) * POLYNOMIAL);
-			CRC32_XOR_TABLE[i] = reg;
 		}
 		
 		// Test if assertions are on
