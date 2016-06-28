@@ -163,7 +163,7 @@ public final class Inflater {
 			int bits = (int)inputNextBits;
 			int count = inputNextBitsLength;
 			int node = 0;
-			while (true) {
+			block: {
 				if (count >= CODE_TABLE_BITS) {  // Fast path using code table
 					int temp = litLenCodeTable[bits & ((1 << CODE_TABLE_BITS) - 1)];
 					assert temp >= 0;  // No need to mask off sign extension bits
@@ -175,7 +175,7 @@ public final class Inflater {
 						// Simple write-back
 						inputNextBits >>>= inputNextBitsLength - count;
 						inputNextBitsLength = count;
-						break;  // Goto end
+						break block;
 					}
 				}
 				
@@ -191,7 +191,6 @@ public final class Inflater {
 				inputNextBitsLength = count;
 				while (node >= 0)  // Slow path reading one bit at a time
 					node = litLenCodeTree[node + readBits(1)];
-				break;  // Not a real loop
 			}
 			int sym = ~node;
 			assert 0 <= sym && sym <= 285;
