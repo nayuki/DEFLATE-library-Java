@@ -9,10 +9,12 @@
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Date;
+import java.util.zip.CRC32;
 import java.util.zip.DataFormatException;
 import io.nayuki.deflate.Inflater;
 import io.nayuki.deflate.MarkableFileInputStream;
@@ -43,7 +45,7 @@ public final class gunzip {
 		try {
 			// Start reading
 			InputStream in = new MarkableFileInputStream(inFile);
-			Inflater inf;
+			LengthCrc32OutputStream checkOut;
 			int crc, size;
 			try {
 				// Header
@@ -121,15 +123,16 @@ public final class gunzip {
 				// Decompress and write to output file
 				File outFile = new File(args[1]);
 				OutputStream out = new FileOutputStream(outFile);
+				checkOut = new LengthCrc32OutputStream(out);
 				long elapsedTime;
 				try {
 					long startTime = System.nanoTime();
-					inf = new Inflater(in, out);
+					new Inflater(in, checkOut);
 					elapsedTime = System.nanoTime() - startTime;
 				} catch (DataFormatException e) {
 					return "Invalid or corrupt compressed data: " + e.getMessage();
 				} finally {
-					out.close();
+					checkOut.close();
 				}
 				System.err.printf("Input  speed: %.2f MiB/s%n",  inFile.length() / 1048576.0 / elapsedTime * 1.0e9);
 				System.err.printf("Output speed: %.2f MiB/s%n", outFile.length() / 1048576.0 / elapsedTime * 1.0e9);
@@ -146,9 +149,9 @@ public final class gunzip {
 			}
 			
 			// Check
-			if (size != (int)inf.getLength())
+			if (size != (int)checkOut.getLength())
 				return "Decompressed size mismatch";
-			if (crc != inf.getCrc32())
+			if (crc != checkOut.getCrc32())
 				return "Decompression CRC-32 mismatch";
 			
 		} catch (IOException e) {
@@ -182,6 +185,46 @@ public final class gunzip {
 				throw new EOFException();
 			off += n;
 		}
+	}
+	
+	
+	
+	private static final class LengthCrc32OutputStream extends FilterOutputStream {
+		
+		private long length;  // Total number of bytes written, modulo 2^64
+		private CRC32 checksum;
+		
+		
+		public LengthCrc32OutputStream(OutputStream out) {
+			super(out);
+			length = 0;
+			checksum = new CRC32();
+		}
+		
+		
+		public void write(int b) throws IOException {
+			out.write(b);
+			length++;
+			checksum.update(b);
+		}
+		
+		
+		public void write(byte[] b, int off, int len) throws IOException {
+			out.write(b, off, len);
+			length += len;
+			checksum.update(b, off, len);
+		}
+		
+		
+		public long getLength() {
+			return length;
+		}
+		
+		
+		public int getCrc32() {
+			return (int)checksum.getValue();
+		}
+		
 	}
 	
 }
