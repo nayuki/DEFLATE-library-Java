@@ -344,8 +344,8 @@ public final class Inflater {
 		if (sym <= 264)
 			return sym - 254;
 		else if (sym <= 284) {
-			int n = (sym - 261) >>> 2;  // Number of extra bits to read
-			return ((((sym - 1) & 3) | 4) << n) + 3 + readBits(n);
+			int numExtraBits = (sym - 261) >>> 2;
+			return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
 		} else if (sym == 285)
 			return 258;
 		else  // sym is 286 or 287
@@ -358,8 +358,8 @@ public final class Inflater {
 		if (sym <= 3)
 			return sym + 1;
 		else if (sym <= 29) {
-			int n = (sym >>> 1) - 1;  // Number of extra bits to read
-			return (((sym & 1) | 2) << n) + 1 + readBits(n);
+			int numExtraBits = (sym >>> 1) - 1;
+			return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
 		} else  // sym is 30 or 31
 			throw new DataFormatException("Reserved distance symbol: " + sym);
 	}
