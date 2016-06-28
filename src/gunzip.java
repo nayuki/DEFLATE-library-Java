@@ -6,8 +6,6 @@
  * https://www.nayuki.io/page/fast-deflate-implementation
  */
 
-package io.nayuki.deflate;
-
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -16,6 +14,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Date;
 import java.util.zip.DataFormatException;
+import io.nayuki.deflate.Inflater;
+import io.nayuki.deflate.MarkableFileInputStream;
 
 
 public final class gunzip {
