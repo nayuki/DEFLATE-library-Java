@@ -90,8 +90,10 @@ public final class Inflater {
 			else if (type == 2) {
 				short[][] codeTrees = decodeHuffmanCodes();
 				decompressHuffmanBlock(codeTrees[0], codeTrees[1]);
-			} else
-				throw new DataFormatException("Invalid block type");
+			} else if (type == 3)
+				throw new DataFormatException("Reserved block type");
+			else
+				throw new AssertionError();
 			
 		} while (!isFinal);
 		
@@ -346,8 +348,8 @@ public final class Inflater {
 			return ((((sym - 1) & 3) | 4) << n) + 3 + readBits(n);
 		} else if (sym == 285)
 			return 258;
-		else
-			throw new DataFormatException("Invalid run length symbol: " + sym);
+		else  // sym is 286 or 287
+			throw new DataFormatException("Reserved run length symbol: " + sym);
 	}
 	
 	
@@ -358,8 +360,8 @@ public final class Inflater {
 		else if (sym <= 29) {
 			int n = (sym >>> 1) - 1;  // Number of extra bits to read
 			return (((sym & 1) | 2) << n) + 1 + readBits(n);
-		} else
-			throw new DataFormatException("Invalid distance symbol: " + sym);
+		} else  // sym is 30 or 31
+			throw new DataFormatException("Reserved distance symbol: " + sym);
 	}
 	
 	
