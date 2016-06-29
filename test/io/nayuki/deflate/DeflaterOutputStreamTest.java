@@ -4,7 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Random;
-import java.util.zip.Adler32;
+import java.util.zip.Inflater;
 import java.util.zip.InflaterOutputStream;
 import org.junit.Assert;
 import org.junit.Test;
@@ -80,21 +80,10 @@ public class DeflaterOutputStreamTest {
 	
 	
 	private static void checkInflate(byte[] uncomp, byte[] comp) throws IOException {
-		// Wrap a zlib container around the compressed data
 		ByteArrayOutputStream bout = new ByteArrayOutputStream();
-		bout.write(0x78);
-		bout.write(0xDA);
-		bout.write(comp);
-		Adler32 chksum = new Adler32();
-		chksum.update(uncomp);
-		for (int i = 3; i >= 0; i--)
-			bout.write((int)chksum.getValue() >>> (i * 8));
-		comp = bout.toByteArray();
-		
-		// Use Java's built-in inflater to decompress the data
-		bout = new ByteArrayOutputStream();
-		OutputStream iout = new InflaterOutputStream(bout);
+		OutputStream iout = new InflaterOutputStream(bout, new Inflater(true));
 		iout.write(comp);
+		iout.write(0);  // Extra dummy data as per the API spec
 		iout.close();
 		Assert.assertArrayEquals(uncomp, bout.toByteArray());
 	}
