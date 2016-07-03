@@ -25,6 +25,11 @@ public final class InflaterInputStream extends FilterInputStream {
 	private long inputBitBuffer;       // 0 <= value < 2^inputBitBufferLength
 	private int inputBitBufferLength;  // Always in the range [0, 63]
 	
+	// Buffer of bytes to yield when this.read() is called
+	private byte[] outputBuffer;     // Should have length 257 (but pointless if longer)
+	private int outputBufferLength;  // Number of valid prefix bytes
+	private int outputBufferIndex;   // Index of next byte to produce
+	
 	// Buffer of last 32 KiB of decoded data
 	private static final int DICTIONARY_LENGTH = 32 * 1024;
 	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
@@ -56,6 +61,9 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBufferIndex = 0;
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
+		outputBuffer = new byte[257];
+		outputBufferLength = 0;
+		outputBufferIndex = 0;
 		dictionary = new byte[DICTIONARY_LENGTH];
 		dictionaryIndex = 0;
 		
@@ -94,6 +102,20 @@ public final class InflaterInputStream extends FilterInputStream {
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
 			throw new IndexOutOfBoundsException();
 		
+		int result = 0;  // Number of bytes filled in the array 'b'
+		if (outputBufferLength > 0) {
+			int n = Math.min(outputBufferLength - outputBufferIndex, len);
+			System.arraycopy(outputBuffer, outputBufferIndex, b, off, n);
+			result += n;
+			outputBufferIndex += n;
+			if (outputBufferIndex == outputBufferLength) {
+				outputBufferLength = 0;
+				outputBufferIndex = 0;
+			}
+			if (result == len)
+				return result;
+		}
+		
 		// Get into a block
 		while (state == 0) {
 			if (isLastBlock)
@@ -120,7 +142,6 @@ public final class InflaterInputStream extends FilterInputStream {
 				throw new AssertionError();
 		}
 		
-		int result = 0;  // Number of bytes filled in the array 'b'
 		if (1 <= state && state <= 0xFFFF) {
 			// Read from uncompressed block
 			int toRead = Math.min(state, len - result);
@@ -155,14 +176,18 @@ public final class InflaterInputStream extends FilterInputStream {
 					// Copy bytes to output and dictionary
 					int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
 					for (int i = 0; i < run; i++) {
-						if (result == len)
-							throw new UnsupportedOperationException("Cannot handle LZ77 run beyond output buffer");
 						byte bb = dictionary[dictReadIndex];
-						b[off + result] = bb;
+						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
 						dictionary[dictionaryIndex] = bb;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-						result++;
+						if (result < len) {
+							b[off + result] = bb;
+							result++;
+						} else {
+							assert outputBufferLength < outputBuffer.length;
+							outputBuffer[outputBufferLength] = bb;
+							outputBufferLength++;
+						}
 					}
 					
 				} else {  // sym == 256, end of block
@@ -189,6 +214,9 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBufferIndex = 0;
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
+		outputBuffer = null;
+		outputBufferLength = 0;
+		outputBufferIndex = 0;
 	}
 	
 	
