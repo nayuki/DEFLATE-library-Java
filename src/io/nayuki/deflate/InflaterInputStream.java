@@ -120,28 +120,28 @@ public final class InflaterInputStream extends FilterInputStream {
 				throw new AssertionError();
 		}
 		
+		int result = 0;  // Number of bytes filled in the array 'b'
 		if (1 <= state && state <= 0xFFFF) {
 			// Read from uncompressed block
-			int n = Math.min(state, len);
-			readBytes(b, off, n);
-			for (int i = 0; i < n; i++) {
-				dictionary[dictionaryIndex] = b[off + i];
+			int toRead = Math.min(state, len - result);
+			readBytes(b, off + result, toRead);
+			for (int i = 0; i < toRead; i++) {
+				dictionary[dictionaryIndex] = b[off + result];
 				dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+				result++;
 			}
-			state -= n;
-			return n;
+			state -= toRead;
+			return result;
 			
 		} else if (state == -1) {
-			int n = 0;
-			while (n < len) {
+			while (result < len) {
 				int sym = decodeSymbol(literalLengthCodeTree);
 				assert 0 <= sym && sym <= 287;
 				if (sym < 256) {  // Literal byte
-					b[off] = (byte)sym;
-					off++;
+					b[off + result] = (byte)sym;
 					dictionary[dictionaryIndex] = (byte)sym;
 					dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-					n++;
+					result++;
 				} else if (sym > 256) {  // Length and distance for copying
 					int run = decodeRunLength(sym);
 					assert 3 <= run && run <= 258;
@@ -155,15 +155,14 @@ public final class InflaterInputStream extends FilterInputStream {
 					// Copy bytes to output and dictionary
 					int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
 					for (int i = 0; i < run; i++) {
-						byte bb = dictionary[dictReadIndex];
-						if (n == len)
+						if (result == len)
 							throw new UnsupportedOperationException("Cannot handle LZ77 run beyond output buffer");
-						b[off] = bb;
-						off++;
+						byte bb = dictionary[dictReadIndex];
+						b[off + result] = bb;
 						dictionary[dictionaryIndex] = bb;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-						n++;
+						result++;
 					}
 					
 				} else {  // sym == 256, end of block
@@ -172,7 +171,7 @@ public final class InflaterInputStream extends FilterInputStream {
 					break;
 				}
 			}
-			return n;
+			return result;
 			
 		} else
 			throw new AssertionError();
