@@ -15,8 +15,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Date;
 import java.util.zip.CRC32;
-import java.util.zip.DataFormatException;
-import io.nayuki.deflate.Inflater;
+import io.nayuki.deflate.InflaterInputStream;
 import io.nayuki.deflate.MarkableFileInputStream;
 
 
@@ -126,11 +125,16 @@ public final class gunzip {
 				checkOut = new LengthCrc32OutputStream(out);
 				long elapsedTime;
 				try {
+					InputStream infIn = new InflaterInputStream(in);
 					long startTime = System.nanoTime();
-					new Inflater(in, checkOut);
+					byte[] buf = new byte[64 * 1024];
+					while (true) {
+						int n = infIn.read(buf);
+						if (n == -1)
+							break;
+						checkOut.write(buf, 0, n);
+					}
 					elapsedTime = System.nanoTime() - startTime;
-				} catch (DataFormatException e) {
-					return "Invalid or corrupt compressed data: " + e.getMessage();
 				} finally {
 					checkOut.close();
 				}

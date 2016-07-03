@@ -194,6 +194,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				} else {  // sym == 256, end of block
 					literalLengthCodeTree = null;
 					distanceCodeTree = null;
+					state = 0;
 					break;
 				}
 			}
