@@ -4,6 +4,8 @@ import java.io.EOFException;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.zip.DataFormatException;
 
 
 /**
@@ -11,6 +13,8 @@ import java.io.InputStream;
  * <p>Incomplete functionality - currently only supports uncompressed blocks.</p>
  */
 public final class InflaterInputStream extends FilterInputStream {
+	
+	/*---- Fields ----*/
 	
 	// Buffer of bytes read from in.read() (the underlying input stream)
 	private byte[] inputBuffer;     // Can have any positive length (but longer means less overhead)
@@ -23,15 +27,22 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	// -3: A data format exception has been thrown.
 	// -2: This inflater stream has been closed.
+	// -1: Currently processing a Huffman-compressed block.
 	// 0 to 65535: Number of bytes remaining in current uncompressed block.
 	private int state;
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	private boolean isLastBlock;
 	
+	// These are not null when and only when state = -1.
+	private short[] literalLengthCodeTree;
+	private short[] distanceCodeTree;
 	
 	
-	protected InflaterInputStream(InputStream in) {
+	
+	/*---- Public API methods ----*/
+	
+	public InflaterInputStream(InputStream in) {
 		super(in);
 		
 		// Initialize data buffers
@@ -44,6 +55,8 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Initialize state
 		state = 0;
 		isLastBlock = false;
+		literalLengthCodeTree = null;
+		distanceCodeTree = null;
 	}
 	
 	
@@ -83,20 +96,48 @@ public final class InflaterInputStream extends FilterInputStream {
 			
 			isLastBlock = readBits(1) == 1;
 			int type = readBits(2);
-			if (type != 0)
-				throw new UnsupportedOperationException("Only uncompressed blocks supported");
-			
-			alignInputToByte();
-			state = readBits(16);  // Block length
-			if (state != (readBits(16) ^ 0xFFFF))
-				invalidData("len/nlen mismatch in uncompressed block");
+			if (type == 0) {
+				alignInputToByte();
+				state = readBits(16);  // Block length
+				if (state != (readBits(16) ^ 0xFFFF))
+					invalidData("len/nlen mismatch in uncompressed block");
+			} else if (type == 1) {
+				state = -1;
+				literalLengthCodeTree = FIXED_LITERAL_LENGTH_CODE_TREE;
+				distanceCodeTree = FIXED_DISTANCE_CODE_TREE;
+			} else if (type == 2) {
+				throw new UnsupportedOperationException("Dynamic Huffman blocks not supported");
+			} else if (type == 3)
+				invalidData("Reserved block type");
+			else
+				throw new AssertionError();
 		}
 		
-		assert 1 <= state && state <= 0xFFFF;
-		int n = Math.min(state, len);
-		readBytes(b, off, n);
-		state -= n;
-		return n;
+		if (1 <= state && state <= 0xFFFF) {
+			// Read from uncompressed block
+			int n = Math.min(state, len);
+			readBytes(b, off, n);
+			state -= n;
+			return n;
+			
+		} else if (state == -1) {
+			int n = 0;
+			while (n < len) {
+				int sym = decodeSymbol(literalLengthCodeTree);
+				assert 0 <= sym && sym <= 287;
+				if (sym < 256) {  // Literal byte
+					b[off] = (byte)sym;
+					off++;
+					n++;
+				} else if (sym > 256) {  // Length and distance for copying
+					throw new UnsupportedOperationException("Only literal codes supported");
+				} else  // sym == 256, end of block
+					break;
+			}
+			return n;
+			
+		} else
+			throw new AssertionError();
 	}
 	
 	
@@ -113,6 +154,130 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBitBufferLength = 0;
 	}
 	
+	
+	/*---- Huffman coding methods ----*/
+	
+	/* 
+	 * Converts the given array of symbol code lengths into a canonical code tree.
+	 * A symbol code length is either zero (absent from the tree) or a positive integer.
+	 * 
+	 * A code tree is an array of integers, where each pair represents a node.
+	 * Each pair is adjacent and starts on an even index. The first element of
+	 * the pair represents the left child and the second element represents the
+	 * right child. The root node is at index 0. If an element is non-negative,
+	 * then it is the index of the child node in the array. Otherwise it is the
+	 * bitwise complement of the leaf symbol. This tree is used in decodeSymbol()
+	 * and codeTreeToCodeTable(). Not every element of the array needs to be
+	 * used, nor do used elements need to be contiguous.
+	 * 
+	 * For example, this Huffman tree:
+	 *        o
+	 *       / \
+	 *      o   \
+	 *     / \   \
+	 *   'a' 'b' 'c'
+	 * is serialized as this array:
+	 *   {2, ~'c', ~'a', ~'b'}
+	 * because the root is located at index 0 and the other internal node is
+	 * located at index 2.
+	 */
+	private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
+		final short UNUSED  = 0x7000;
+		final short OPENING = 0x7001;
+		final short OPEN    = 0x7002;
+		
+		short[] result = new short[(codeLengths.length - 1) * 2];  // Worst-case allocation if all symbols are present
+		Arrays.fill(result, UNUSED);
+		result[0] = OPEN;
+		result[1] = OPEN;
+		int allocated = 2;  // Always even in this algorithm
+		
+		int maxCodeLen = 0;
+		for (int x : codeLengths)
+			maxCodeLen = Math.max(x, maxCodeLen);
+		assert maxCodeLen <= 15;
+		
+		// Allocate Huffman tree nodes according to ascending code lengths
+		for (int curCodeLen = 1; curCodeLen <= maxCodeLen; curCodeLen++) {
+			// Loop invariant: Each OPEN child slot in the result array has depth curCodeLen
+			
+			// Allocate all symbols of current code length to open slots in ascending order
+			int resultIndex = 0;
+			int symbol = 0;
+			middle:
+			while (true) {
+				// Find next symbol having current code length
+				while (symbol < codeLengths.length && codeLengths[symbol] != curCodeLen) {
+					assert codeLengths[symbol] >= 0;
+					symbol++;
+				}
+				if (symbol == codeLengths.length)
+					break middle;  // No more symbols to process
+				
+				// Find next open child slot
+				while (resultIndex < result.length && result[resultIndex] != OPEN)
+					resultIndex++;
+				if (resultIndex == result.length)  // No more slots left; tree over-full
+					throw new DataFormatException("This canonical code does not represent a Huffman code tree");
+				
+				// Put the symbol in the slot and increment
+				result[resultIndex] = (short)~symbol;
+				resultIndex++;
+				symbol++;
+			}
+			
+			// Take all open slots and deepen them by one level
+			for (; resultIndex < result.length; resultIndex++) {
+				if (result[resultIndex] == OPEN) {
+					// Allocate a new node
+					assert allocated + 2 <= result.length;
+					result[resultIndex] = (short)allocated;
+					result[allocated + 0] = OPENING;
+					result[allocated + 1] = OPENING;
+					allocated += 2;
+				}
+			}
+			
+			// Do post-processing so we don't open slots that were just opened
+			for (resultIndex = 0; resultIndex < result.length; resultIndex++) {
+				if (result[resultIndex] == OPENING)
+					result[resultIndex] = OPEN;
+			}
+		}
+		
+		// Check for under-full tree after all symbols are allocated
+		for (int i = 0; i < allocated; i++) {
+			if (result[i] == OPEN)
+				throw new DataFormatException("This canonical code does not represent a Huffman code tree");
+		}
+		
+		return result;
+	}
+	
+	
+	private int decodeSymbol(short[] codeTree) throws IOException {
+		int node = 0;
+		
+		int count = inputBitBufferLength;
+		if (count > 0) {  // Medium path using buffered bits
+			// Because of this truncation, the code tree depth needs to be no more than 32
+			int bits = (int)inputBitBuffer;
+			do {
+				node = codeTree[node + (bits & 1)];
+				bits >>>= 1;
+				count--;
+			} while (count > 0 && node >= 0);
+			inputBitBuffer >>>= inputBitBufferLength - count;
+		inputBitBufferLength = count;
+		}
+		
+		while (node >= 0)  // Slow path reading one bit at a time
+			node = codeTree[node + readBits(1)];
+		return ~node;  // Symbol encoded in bitwise complement
+	}
+	
+	
+	/*---- I/O methods ----*/
 	
 	// Returns the given number of least significant bits from the bit buffer,
 	// which updates the bit buffer and possibly also the byte buffer.
@@ -240,6 +405,29 @@ public final class InflaterInputStream extends FilterInputStream {
 		state = -3;
 		isLastBlock = true;
 		throw new IOException("Invalid DEFLATE data: " + reason);
+	}
+	
+	
+	/*---- Static tables ----*/
+	
+	private static final short[] FIXED_LITERAL_LENGTH_CODE_TREE;
+	private static final short[] FIXED_DISTANCE_CODE_TREE;
+	
+	static {
+		try {
+			byte[] llcodelens = new byte[288];
+			Arrays.fill(llcodelens,   0, 144, (byte)8);
+			Arrays.fill(llcodelens, 144, 256, (byte)9);
+			Arrays.fill(llcodelens, 256, 280, (byte)7);
+			Arrays.fill(llcodelens, 280, 288, (byte)8);
+			FIXED_LITERAL_LENGTH_CODE_TREE = codeLengthsToCodeTree(llcodelens);
+			
+			byte[] distcodelens = new byte[32];
+			Arrays.fill(distcodelens, (byte)5);
+			FIXED_DISTANCE_CODE_TREE = codeLengthsToCodeTree(distcodelens);
+		} catch (DataFormatException e) {
+			throw new AssertionError(e);
+		}
 	}
 	
 }
