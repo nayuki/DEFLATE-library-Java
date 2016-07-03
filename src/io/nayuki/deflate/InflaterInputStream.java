@@ -45,6 +45,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	private boolean isLastBlock;
 	
+	private final boolean isDetachable;
+	
 	private short[] literalLengthCodeTree;  // Must be null when and only when state != -1
 	private short[] distanceCodeTree;       // Must be null when state != -1
 	
@@ -52,8 +54,16 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- Public API methods ----*/
 	
-	public InflaterInputStream(InputStream in) {
+	public InflaterInputStream(InputStream in, boolean detachable) {
+		// Handle the input stream
 		super(in);
+		isDetachable = detachable;
+		if (detachable) {
+			if (in.markSupported())
+				in.mark(0);
+			else
+				throw new IllegalArgumentException("Input stream not markable, can't detach");
+		}
 		
 		// Initialize data buffers
 		inputBuffer = new byte[16 * 1024];
@@ -202,6 +212,24 @@ public final class InflaterInputStream extends FilterInputStream {
 			
 		} else
 			throw new AssertionError();
+	}
+	
+	
+	public void detach() throws IOException {
+		if (!isDetachable)
+			throw new IllegalStateException("Detachability not specified at construction");
+		
+		// Adjust over-consumed bytes
+		in.reset();
+		int skip = inputBufferIndex - inputBitBufferLength / 8;  // Note: A partial byte is considered to be consumed
+		assert skip >= 0;
+		while (skip > 0) {
+			long n = in.skip(skip);
+			if (n <= 0)
+				throw new EOFException();
+			skip -= n;
+		}
+		in = null;
 	}
 	
 	
@@ -547,6 +575,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	private void fillInputBuffer() throws IOException {
 		if (inputBufferIndex < inputBufferLength)
 			throw new AssertionError("Input buffer not fully consumed yet");
+		if (isDetachable)
+			in.mark(inputBuffer.length);
 		inputBufferLength = in.read(inputBuffer);
 		inputBufferIndex = 0;
 		if (inputBufferLength == -1) {
@@ -593,7 +623,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			byte[] distcodelens = new byte[32];
 			Arrays.fill(distcodelens, (byte)5);
 			
-			InflaterInputStream dummy = new InflaterInputStream(new ByteArrayInputStream(new byte[0]));
+			InflaterInputStream dummy = new InflaterInputStream(new ByteArrayInputStream(new byte[0]), false);
 			FIXED_LITERAL_LENGTH_CODE_TREE = dummy.codeLengthsToCodeTree(llcodelens);
 			FIXED_DISTANCE_CODE_TREE = dummy.codeLengthsToCodeTree(distcodelens);
 		} catch (IOException e) {

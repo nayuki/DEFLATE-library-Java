@@ -125,7 +125,7 @@ public final class gunzip {
 				checkOut = new LengthCrc32OutputStream(out);
 				long elapsedTime;
 				try {
-					InputStream infIn = new InflaterInputStream(in);
+					InflaterInputStream infIn = new InflaterInputStream(in, true);
 					long startTime = System.nanoTime();
 					byte[] buf = new byte[64 * 1024];
 					while (true) {
@@ -135,6 +135,7 @@ public final class gunzip {
 						checkOut.write(buf, 0, n);
 					}
 					elapsedTime = System.nanoTime() - startTime;
+					infIn.detach();
 				} finally {
 					checkOut.close();
 				}

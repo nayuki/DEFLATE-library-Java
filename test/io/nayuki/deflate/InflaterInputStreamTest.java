@@ -36,7 +36,7 @@ public final class InflaterInputStreamTest {
 			
 			ByteArrayInputStream bin = new ByteArrayInputStream(comp);
 			ByteArrayOutputStream bout = new ByteArrayOutputStream();
-			InflaterInputStream iin = new InflaterInputStream(bin);
+			InflaterInputStream iin = new InflaterInputStream(bin, false);
 			for (int remain = uncomp.length; remain > 0; ) {
 				byte[] b = new byte[rand.nextInt(Math.min(remain + 1, 30))];
 				int n = iin.read(b);
