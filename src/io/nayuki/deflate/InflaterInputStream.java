@@ -25,6 +25,12 @@ public final class InflaterInputStream extends FilterInputStream {
 	private long inputBitBuffer;       // 0 <= value < 2^inputBitBufferLength
 	private int inputBitBufferLength;  // Always in the range [0, 63]
 	
+	// Buffer of last 32 KiB of decoded data
+	private static final int DICTIONARY_LENGTH = 32 * 1024;
+	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
+	private byte[] dictionary;
+	private int dictionaryIndex;
+	
 	// -3: A data format exception has been thrown.
 	// -2: This inflater stream has been closed.
 	// -1: Currently processing a Huffman-compressed block.
@@ -34,9 +40,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	private boolean isLastBlock;
 	
-	// These are not null when and only when state = -1.
-	private short[] literalLengthCodeTree;
-	private short[] distanceCodeTree;
+	private short[] literalLengthCodeTree;  // Must be null when and only when state != -1
+	private short[] distanceCodeTree;       // Must be null when state != -1
 	
 	
 	
@@ -51,6 +56,8 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBufferIndex = 0;
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
+		dictionary = new byte[DICTIONARY_LENGTH];
+		dictionaryIndex = 0;
 		
 		// Initialize state
 		state = 0;
@@ -117,6 +124,10 @@ public final class InflaterInputStream extends FilterInputStream {
 			// Read from uncompressed block
 			int n = Math.min(state, len);
 			readBytes(b, off, n);
+			for (int i = 0; i < n; i++) {
+				dictionary[dictionaryIndex] = b[off + i];
+				dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+			}
 			state -= n;
 			return n;
 			
@@ -128,11 +139,38 @@ public final class InflaterInputStream extends FilterInputStream {
 				if (sym < 256) {  // Literal byte
 					b[off] = (byte)sym;
 					off++;
+					dictionary[dictionaryIndex] = (byte)sym;
+					dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 					n++;
 				} else if (sym > 256) {  // Length and distance for copying
-					throw new UnsupportedOperationException("Only literal codes supported");
-				} else  // sym == 256, end of block
+					int run = decodeRunLength(sym);
+					assert 3 <= run && run <= 258;
+					if (distanceCodeTree == null)
+						invalidData("Length symbol encountered with empty distance code");
+					int distSym = decodeSymbol(distanceCodeTree);
+					assert 0 <= distSym && distSym <= 31;
+					int dist = decodeDistance(distSym);
+					assert 1 <= dist && dist <= 32768;
+					
+					// Copy bytes to output and dictionary
+					int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
+					for (int i = 0; i < run; i++) {
+						byte bb = dictionary[dictReadIndex];
+						if (n == len)
+							throw new UnsupportedOperationException("Cannot handle LZ77 run beyond output buffer");
+						b[off] = bb;
+						off++;
+						dictionary[dictionaryIndex] = bb;
+						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+						n++;
+					}
+					
+				} else {  // sym == 256, end of block
+					literalLengthCodeTree = null;
+					distanceCodeTree = null;
 					break;
+				}
 			}
 			return n;
 			
@@ -274,6 +312,36 @@ public final class InflaterInputStream extends FilterInputStream {
 		while (node >= 0)  // Slow path reading one bit at a time
 			node = codeTree[node + readBits(1)];
 		return ~node;  // Symbol encoded in bitwise complement
+	}
+	
+	
+	private int decodeRunLength(int sym) throws IOException {
+		assert 257 <= sym && sym <= 287;
+		if (sym <= 264)
+			return sym - 254;
+		else if (sym <= 284) {
+			int numExtraBits = (sym - 261) >>> 2;
+			return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
+		} else if (sym == 285)
+			return 258;
+		else {  // sym is 286 or 287
+			invalidData("Reserved run length symbol: " + sym);
+			throw new AssertionError();
+		}
+	}
+	
+	
+	private int decodeDistance(int sym) throws IOException {
+		assert 0 <= sym && sym < 32;
+		if (sym <= 3)
+			return sym + 1;
+		else if (sym <= 29) {
+			int numExtraBits = (sym >>> 1) - 1;
+			return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
+		} else {  // sym is 30 or 31
+			invalidData("Reserved distance symbol: " + sym);
+			throw new AssertionError();
+		}
 	}
 	
 	
