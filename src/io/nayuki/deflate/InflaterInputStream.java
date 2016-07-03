@@ -1,11 +1,11 @@
 package io.nayuki.deflate;
 
+import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-import java.util.zip.DataFormatException;
 
 
 /**
@@ -135,7 +135,8 @@ public final class InflaterInputStream extends FilterInputStream {
 				literalLengthCodeTree = FIXED_LITERAL_LENGTH_CODE_TREE;
 				distanceCodeTree = FIXED_DISTANCE_CODE_TREE;
 			} else if (type == 2) {
-				throw new UnsupportedOperationException("Dynamic Huffman blocks not supported");
+				state = -1;
+				decodeHuffmanCodes();
 			} else if (type == 3)
 				invalidData("Reserved block type");
 			else
@@ -222,6 +223,76 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- Huffman coding methods ----*/
 	
+	private void decodeHuffmanCodes() throws IOException {
+		int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
+		int numDistCodes    = readBits(5) +   1;  // hdist +   1
+		
+		int numCodeLenCodes = readBits(4) +   4;  // hclen +   4
+		byte[] codeLenCodeLen = new byte[19];
+		for (int i = 0; i < numCodeLenCodes; i++)
+			codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
+		short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
+		
+		byte[] codeLens = new byte[numLitLenCodes + numDistCodes];
+		byte runVal = -1;
+		int runLen = 0;
+		for (int i = 0; i < codeLens.length; ) {
+			if (runLen > 0) {
+				assert runVal != -1;
+				codeLens[i] = runVal;
+				runLen--;
+				i++;
+			} else {
+				int sym = decodeSymbol(codeLenCodeTree);
+				assert 0 <= sym && sym <= 18;
+				if (sym < 16) {
+					runVal = codeLens[i] = (byte)sym;
+					i++;
+				} else if (sym == 16) {
+					if (runVal == -1)
+						invalidData("No code length value to copy");
+					runLen = readBits(2) + 3;
+				} else if (sym == 17) {
+					runVal = 0;
+					runLen = readBits(3) + 3;
+				} else {  // sym == 18
+					runVal = 0;
+					runLen = readBits(7) + 11;
+				}
+			}
+		}
+		if (runLen > 0)
+			invalidData("Run exceeds number of codes");
+		
+		// Create code trees
+		byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
+		literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
+		
+		byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
+		if (distCodeLen.length == 1 && distCodeLen[0] == 0)
+			distanceCodeTree = null;  // Empty distance code; the block shall be all literal symbols
+		else {
+			// Get statistics for upcoming logic
+			int oneCount = 0;
+			int otherPositiveCount = 0;
+			for (byte x : distCodeLen) {
+				if (x == 1)
+					oneCount++;
+				else if (x > 1)
+					otherPositiveCount++;
+			}
+			
+			// Handle the case where only one distance code is defined
+			if (oneCount == 1 && otherPositiveCount == 0) {
+				// Add a dummy invalid code to make the Huffman tree complete
+				distCodeLen = Arrays.copyOf(distCodeLen, 32);
+				distCodeLen[31] = 1;
+			}
+			distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
+		}
+	}
+	
+	
 	/* 
 	 * Converts the given array of symbol code lengths into a canonical code tree.
 	 * A symbol code length is either zero (absent from the tree) or a positive integer.
@@ -246,7 +317,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * because the root is located at index 0 and the other internal node is
 	 * located at index 2.
 	 */
-	private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
+	private short[] codeLengthsToCodeTree(byte[] codeLengths) throws IOException {
 		final short UNUSED  = 0x7000;
 		final short OPENING = 0x7001;
 		final short OPEN    = 0x7002;
@@ -283,7 +354,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				while (resultIndex < result.length && result[resultIndex] != OPEN)
 					resultIndex++;
 				if (resultIndex == result.length)  // No more slots left; tree over-full
-					throw new DataFormatException("This canonical code does not represent a Huffman code tree");
+					invalidData("This canonical code does not represent a Huffman code tree");
 				
 				// Put the symbol in the slot and increment
 				result[resultIndex] = (short)~symbol;
@@ -313,7 +384,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Check for under-full tree after all symbols are allocated
 		for (int i = 0; i < allocated; i++) {
 			if (result[i] == OPEN)
-				throw new DataFormatException("This canonical code does not represent a Huffman code tree");
+				invalidData("This canonical code does not represent a Huffman code tree");
 		}
 		
 		return result;
@@ -505,6 +576,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- Static tables ----*/
 	
+	private static final int[] CODE_LENGTH_CODE_ORDER = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+	
 	private static final short[] FIXED_LITERAL_LENGTH_CODE_TREE;
 	private static final short[] FIXED_DISTANCE_CODE_TREE;
 	
@@ -515,12 +588,14 @@ public final class InflaterInputStream extends FilterInputStream {
 			Arrays.fill(llcodelens, 144, 256, (byte)9);
 			Arrays.fill(llcodelens, 256, 280, (byte)7);
 			Arrays.fill(llcodelens, 280, 288, (byte)8);
-			FIXED_LITERAL_LENGTH_CODE_TREE = codeLengthsToCodeTree(llcodelens);
 			
 			byte[] distcodelens = new byte[32];
 			Arrays.fill(distcodelens, (byte)5);
-			FIXED_DISTANCE_CODE_TREE = codeLengthsToCodeTree(distcodelens);
-		} catch (DataFormatException e) {
+			
+			InflaterInputStream dummy = new InflaterInputStream(new ByteArrayInputStream(new byte[0]));
+			FIXED_LITERAL_LENGTH_CODE_TREE = dummy.codeLengthsToCodeTree(llcodelens);
+			FIXED_DISTANCE_CODE_TREE = dummy.codeLengthsToCodeTree(distcodelens);
+		} catch (IOException e) {
 			throw new AssertionError(e);
 		}
 	}
