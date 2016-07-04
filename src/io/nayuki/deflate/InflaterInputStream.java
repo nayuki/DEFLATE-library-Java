@@ -375,12 +375,14 @@ public final class InflaterInputStream extends FilterInputStream {
 		int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
 		int numDistCodes    = readBits(5) +   1;  // hdist +   1
 		
+		// Read the code length code lengths
 		int numCodeLenCodes = readBits(4) +   4;  // hclen +   4
-		byte[] codeLenCodeLen = new byte[19];
+		byte[] codeLenCodeLen = new byte[19];  // This array is filled in a strange order
 		for (int i = 0; i < numCodeLenCodes; i++)
 			codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
 		short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
 		
+		// Read the main code lengths and handle runs
 		byte[] codeLens = new byte[numLitLenCodes + numDistCodes];
 		byte runVal = -1;
 		int runLen = 0;
@@ -412,10 +414,11 @@ public final class InflaterInputStream extends FilterInputStream {
 		if (runLen > 0)
 			invalidData("Run exceeds number of codes");
 		
-		// Create code trees
+		// Create literal-length code tree
 		byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
 		literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
 		
+		// Create distance code tree with some extra processing
 		byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
 		if (distCodeLen.length == 1 && distCodeLen[0] == 0)
 			distanceCodeTree = null;  // Empty distance code; the block shall be all literal symbols
