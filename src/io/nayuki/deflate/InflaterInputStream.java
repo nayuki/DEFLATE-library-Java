@@ -63,11 +63,34 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- Constructors ----*/
 	
+	/**
+	 * Constructs an inflater input stream over the specified underlying input stream, and with the
+	 * specified option for detachability. The underlying stream must contain DEFLATE-compressed data with
+	 * no headers or footers (e.g. must be unwrapped from the zlib or gzip container formats). Detachability
+	 * allows {@link #detach()} to be called, and requires the specified input stream to support marking.
+	 * @param in the underlying input stream of raw DEFLATE-compressed data
+	 * @param detachable whether {@code detach()} can be called later
+	 * @throws NullPointerException if the input stream is {@code null}
+	 * @throws IllegalArgumentException if {@code detach == true} but {@code in.markSupported() == false}
+	 */
 	public InflaterInputStream(InputStream in, boolean detachable) {
 		this(in, detachable, 16 * 1024);
 	}
 	
 	
+	/**
+	 * Constructs an inflater input stream over the specified underlying input stream, with the
+	 * specified options for detachability and input buffer size. The underlying stream must
+	 * contain DEFLATE-compressed data with no headers or footers (e.g. must be unwrapped from
+	 * the zlib or gzip container formats). Detachability allows {@link #detach()} to be called,
+	 * and requires the specified input stream to support marking.
+	 * @param in the underlying input stream of raw DEFLATE-compressed data
+	 * @param detachable whether {@code detach()} can be called later
+	 * @param inBufLen the size of the internal read buffer, which must be positive
+	 * @throws NullPointerException if the input stream is {@code null}
+	 * @throws IllegalArgumentException if {@code inBufLen < 1}
+	 * @throws IllegalArgumentException if {@code detach == true} but {@code in.markSupported() == false}
+	 */
 	public InflaterInputStream(InputStream in, boolean detachable, int inBufLen) {
 		// Handle the input stream and detachability
 		super(in);
@@ -104,6 +127,15 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- Public API methods ----*/
 	
+	/**
+	 * Reads the next byte of decompressed data from this stream. If data is available
+	 * then a number in the range [0, 255] is returned (blocking if necessary);
+	 * otherwise &minus;1 is returned if the end of stream is reached.
+	 * @return the next unsigned byte of data, or &minus;1 for the end of stream
+	 * @throws IOException if an I/O exception occurred in the underlying input stream, the end of
+	 * stream was encountered at an unexpected position, or the compressed data has a format error
+	 * @throws IllegalStateException if the stream has already been closed
+	 */
 	public int read() throws IOException {
 		while (true) {
 			byte[] b = new byte[1];
@@ -121,6 +153,16 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
+	/**
+	 * Reads some bytes from the decompressed data of this stream into the specified array's subrange.
+	 * This returns the number of data bytes that were stored into the array, and is in the range
+	 * [&minus;1, len]. Note that 0 can be returned even if the end of stream hasn't been reached yet.
+	 * @throws NullPointerException if the array is {@code null}
+	 * @throws ArrayIndexOutOfBoundsException if the array subrange is out of bounds
+	 * @throws IOException if an I/O exception occurred in the underlying input stream, the end of
+	 * stream was encountered at an unexpected position, or the compressed data has a format error
+	 * @throws IllegalStateException if the stream has already been closed
+	 */
 	public int read(byte[] b, int off, int len) throws IOException {
 		// Check arguments and state
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
@@ -246,6 +288,18 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
+	/**
+	 * Detaches the underlying input stream from this decompressor. This puts the underlying stream
+	 * at the position of the first byte after the data that this decompressor actually consumed.
+	 * <p>This method exists because for efficiency, the decompressor may read more bytes from the
+	 * underlying stream than necessary to produce the decompressed data. If you want to continue
+	 * reading the underlying stream exactly after the point the DEFLATE-compressed data ends,
+	 * then it is necessary to call this detach method.</p>
+	 * <p>This can only be called once, and is mutually exclusive with respect to calling
+	 * {@link #close()}. It is illegal to call {@link #read()} after detaching.</p>
+	 * @throws IllegalStateException if detach was already called or this stream has been closed
+	 * @throws IOException if an I/O exception occurred
+	 */
 	public void detach() throws IOException {
 		if (!isDetachable)
 			throw new IllegalStateException("Detachability not specified at construction");
@@ -266,6 +320,12 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
+	/**
+	 * Closes this input stream and the underlying stream.
+	 * It is illegal to call {@link #read()} or {@link #detach()} after closing.
+	 * It is idempotent to call this {@link #close()} method more than once.
+	 * @throws IOException if an I/O exception occurred in the underlying stream
+	 */
 	public void close() throws IOException {
 		state = -2;
 		isLastBlock = true;
