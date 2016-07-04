@@ -96,7 +96,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Handle the input stream and detachability
 		super(in);
 		if (inBufLen <= 0)
-			throw new IllegalArgumentException("Input buffer length must be positive");
+			throw new IllegalArgumentException("Input buffer size must be positive");
 		isDetachable = detachable;
 		if (detachable) {
 			if (in.markSupported())
@@ -166,8 +166,10 @@ public final class InflaterInputStream extends FilterInputStream {
 	 */
 	public int read(byte[] b, int off, int len) throws IOException {
 		// Check arguments and state
+		if (b == null)
+			throw new NullPointerException();
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
-			throw new IndexOutOfBoundsException();
+			throw new ArrayIndexOutOfBoundsException();
 		if (in == null)
 			throw new IllegalStateException("Stream already closed");
 		if (state == -2)
@@ -450,9 +452,12 @@ public final class InflaterInputStream extends FilterInputStream {
 		int allocated = 2;  // Always even in this algorithm
 		
 		int maxCodeLen = 0;
-		for (int x : codeLengths)
-			maxCodeLen = Math.max(x, maxCodeLen);
-		assert maxCodeLen <= 15;
+		for (byte cl : codeLengths) {
+			assert 0 <= cl && cl <= 15;
+			maxCodeLen = Math.max(cl, maxCodeLen);
+		}
+		if (maxCodeLen > 15)
+			throw new AssertionError("Maximum code length exceeds DEFLATE specification");
 		
 		// Allocate Huffman tree nodes according to ascending code lengths
 		for (int curCodeLen = 1; curCodeLen <= maxCodeLen; curCodeLen++) {
@@ -464,10 +469,8 @@ public final class InflaterInputStream extends FilterInputStream {
 			middle:
 			while (true) {
 				// Find next symbol having current code length
-				while (symbol < codeLengths.length && codeLengths[symbol] != curCodeLen) {
-					assert codeLengths[symbol] >= 0;
+				while (symbol < codeLengths.length && codeLengths[symbol] != curCodeLen)
 					symbol++;
-				}
 				if (symbol == codeLengths.length)
 					break middle;  // No more symbols to process
 				
@@ -475,7 +478,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				while (resultIndex < result.length && result[resultIndex] != CODE_TREE_OPEN_SLOT)
 					resultIndex++;
 				if (resultIndex == result.length)  // No more slots left; tree over-full
-					invalidData("This canonical code does not represent a Huffman code tree");
+					invalidData("Canonical code fails to produce full Huffman code tree");
 				
 				// Put the symbol in the slot and increment
 				result[resultIndex] = (short)~symbol;
@@ -499,7 +502,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Check for under-full tree after all symbols are allocated
 		for (int i = 0; i < allocated; i++) {
 			if (result[i] == CODE_TREE_OPEN_SLOT)
-				invalidData("This canonical code does not represent a Huffman code tree");
+				invalidData("Canonical code fails to produce full Huffman code tree");
 		}
 		
 		return result;
@@ -539,13 +542,13 @@ public final class InflaterInputStream extends FilterInputStream {
 			return 258;
 		else {  // sym is 286 or 287
 			invalidData("Reserved run length symbol: " + sym);
-			throw new AssertionError();
+			throw new AssertionError("Unreachable");
 		}
 	}
 	
 	
 	private int decodeDistance(int sym) throws IOException {
-		assert 0 <= sym && sym < 32;
+		assert 0 <= sym && sym <= 31;
 		if (sym <= 3)
 			return sym + 1;
 		else if (sym <= 29) {
@@ -553,7 +556,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
 		} else {  // sym is 30 or 31
 			invalidData("Reserved distance symbol: " + sym);
-			throw new AssertionError();
+			throw new AssertionError("Unreachable");
 		}
 	}
 	
@@ -595,7 +598,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				fillInputBuffer();
 				continue;
 			} else
-				throw new AssertionError();
+				throw new AssertionError("Unreachable state");
 			
 			// Update the buffer
 			inputBitBuffer |= temp << inputBitBufferLength;
@@ -619,8 +622,9 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	private void readBytes(byte[] b, int off, int len) throws IOException {
 		// Check bit buffer invariants
-		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
-		assert inputBitBuffer >>> inputBitBufferLength == 0;
+		if (inputBitBufferLength < 0 || inputBitBufferLength > 63
+				|| inputBitBuffer >>> inputBitBufferLength != 0)
+			throw new AssertionError("Invalid input bit buffer state");
 		
 		// Unpack saved bits first
 		alignInputToByte();
@@ -633,6 +637,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Read from input buffer
 		{
 			int n = Math.min(len, inputBufferLength - inputBufferIndex);
+			assert inputBitBufferLength == 0 || n == 0;
 			System.arraycopy(inputBuffer, inputBufferIndex, b, off, n);
 			inputBufferIndex += n;
 			off += n;
@@ -641,6 +646,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		
 		// Read directly from input stream
 		while (len > 0) {
+			assert inputBufferIndex == inputBufferLength;
 			int n = in.read(b, off, len);
 			if (n == -1)
 				invalidData("Unexpected end of stream");
