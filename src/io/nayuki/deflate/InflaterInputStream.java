@@ -19,7 +19,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	// Buffer of bytes read from in.read() (the underlying input stream)
 	private byte[] inputBuffer;     // Can have any positive length (but longer means less overhead)
-	private int inputBufferLength;  // Number of valid prefix bytes, or -1 to indicate end of stream
+	private int inputBufferLength;  // Number of valid prefix bytes, at least 0
 	private int inputBufferIndex;   // Index of next byte to consume
 	
 	// Buffer of bits packed from the bytes in 'inputBuffer'
@@ -34,6 +34,14 @@ public final class InflaterInputStream extends FilterInputStream {
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
 	private byte[] dictionary;
 	private int dictionaryIndex;
+	
+	// Generally speaking, the overall data flow of this decompressor looks like this:
+	//   in (the underlying input stream, declared in the superclass) -> in.read()
+	//   -> inputBuffer -> packing logic in readBits()
+	//   -> inputBitBuffer -> readBit() or equivalent
+	//   -> various literal and length-distance symbols -> LZ77 decoding logic
+	//   -> dictionary, sometimes also outputBuffer -> copying to the caller's array
+	//   -> b (the array passed into this.read(byte[],int,int)).
 	
 	
 	/* Configuration */
@@ -54,6 +62,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	private int state;
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
+	// This starts as false, should eventually become true, and never changes back to false.
 	private boolean isLastBlock;
 	
 	// Current code trees for when state == -1. When state != -1, both must be null.
@@ -75,7 +84,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * @throws IllegalArgumentException if {@code detach == true} but {@code in.markSupported() == false}
 	 */
 	public InflaterInputStream(InputStream in, boolean detachable) {
-		this(in, detachable, 16 * 1024);
+		this(in, detachable, 16 * 1024);  // Use a reasonable default input buffer size
 	}
 	
 	
@@ -138,6 +147,12 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * @throws IllegalStateException if the stream has already been closed
 	 */
 	public int read() throws IOException {
+		// In theory this method for reading a single byte could be implemented somewhat faster.
+		// We could take the logic of read(byte[],int,int) and simplify it for the special case
+		// of handling one byte. But if the caller chose to use this read() method instead of
+		// the bulk read(byte[]) method, then they have already chosen to not care about speed.
+		// Therefore speeding up this method would result in needless complexity. Instead,
+		// we chose to optimize this method for simplicity and ease of verifying correctness.
 		while (true) {
 			byte[] b = new byte[1];
 			switch (read(b)) {
@@ -195,6 +210,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			if (result == len)
 				return result;
 		}
+		// Now the output buffer is clear, and we have room to read at least one byte
 		assert outputBufferLength == 0 && outputBufferIndex == 0 && result < len;
 		
 		// Get into a block if not already inside one
@@ -202,7 +218,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			if (isLastBlock)
 				return -1;
 			
-			// Read and process block header
+			// Read and process the block header
 			isLastBlock = readBits(1) == 1;
 			switch (readBits(2)) {  // Type
 				case 0:
@@ -228,7 +244,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			}
 		}
 		
-		// Read the block's data into the argument array
+		// Read the current block's data into the argument array
 		if (1 <= state && state <= 0xFFFF) {
 			// Read bytes from uncompressed block
 			int toRead = Math.min(state, len - result);
@@ -309,9 +325,10 @@ public final class InflaterInputStream extends FilterInputStream {
 		if (in == null)
 			throw new IllegalStateException("Input stream already detached/closed");
 		
-		// Adjust over-consumed bytes
+		// Rewind the underlying stream, then skip over bytes that were already consumed.
+		// Note that a byte with some bits consumed is considered to be fully consumed.
 		in.reset();
-		int skip = inputBufferIndex - inputBitBufferLength / 8;  // Note: A partial byte is considered to be consumed
+		int skip = inputBufferIndex - inputBitBufferLength / 8;
 		assert skip >= 0;
 		while (skip > 0) {
 			long n = in.skip(skip);
@@ -350,6 +367,10 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- Huffman coding methods ----*/
 	
+	// Reads the current block's dynamic Huffman code tables from from the input buffers/stream,
+	// processes the code lengths and computes the code trees, and ultimately sets just the variables
+	// 'literalLengthCodeTree' and 'distanceCodeTree'. This might throw an IOException for actual
+	// I/O exceptions, unexpected end of stream, or a description of an invalid Huffman code.
 	private void decodeHuffmanCodes() throws IOException {
 		int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
 		int numDistCodes    = readBits(5) +   1;  // hdist +   1
@@ -424,6 +445,10 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * Converts the given array of symbol code lengths into a canonical code tree.
 	 * A symbol code length is either zero (absent from the tree) or a positive integer.
 	 * 
+	 * This is almost a pure method (taking an array and returning a newly computed one),
+	 * except that if the given array produces an invalid full Huffman code tree then
+	 * this method destroys this decompressor's state so that no further reading can happen.
+	 * 
 	 * A code tree is an array of integers, where each pair represents a node.
 	 * Each pair is adjacent and starts on an even index. The first element of
 	 * the pair represents the left child and the second element represents the
@@ -445,7 +470,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * located at index 2.
 	 */
 	private short[] codeLengthsToCodeTree(byte[] codeLengths) throws IOException {
-		short[] result = new short[(codeLengths.length - 1) * 2];  // Worst-case allocation if all symbols are present
+		// Allocate array for the worst case if all symbols are present
+		short[] result = new short[(codeLengths.length - 1) * 2];
 		Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
 		result[0] = CODE_TREE_OPEN_SLOT;
 		result[1] = CODE_TREE_OPEN_SLOT;
@@ -478,7 +504,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				if (resultIndex == allocated)  // No more slots left
 					invalidData("Canonical code fails to produce full Huffman code tree");
 				
-				// Put the symbol in the slot and increment
+				// Put the symbol into the slot and increment
 				result[resultIndex] = (short)~symbol;
 				resultIndex++;
 				symbol++;
@@ -497,18 +523,20 @@ public final class InflaterInputStream extends FilterInputStream {
 			}
 		}
 		
-		// Check for under-full tree after all symbols are allocated
+		// Check for unused open slots after all symbols are allocated
 		for (int i = 0; i < allocated; i++) {
 			if (result[i] == CODE_TREE_OPEN_SLOT)
 				invalidData("Canonical code fails to produce full Huffman code tree");
 		}
-		
 		return result;
 	}
 	
 	
+	// Reads bits from the input buffers/stream and uses the given code tree to decode the next symbol.
+	// The returned symbol value is a non-negative integer. This throws an IOException if the end of stream
+	// is reached before a symbol is decoded, or if the underlying stream experiences an I/O exception.
 	private int decodeSymbol(short[] codeTree) throws IOException {
-		int node = 0;
+		int node = 0;  // An index into the codeTree array which signifies the current tree node
 		while (node >= 0) {
 			if (inputBitBufferLength > 0) {  // Medium path using buffered bits
 				node = codeTree[node + ((int)inputBitBuffer & 1)];
@@ -517,10 +545,13 @@ public final class InflaterInputStream extends FilterInputStream {
 			} else  // Slow path with potential I/O operations
 				node = codeTree[node + readBits(1)];
 		}
-		return ~node;  // Symbol encoded in bitwise complement
+		return ~node;  // Symbol was encoded as bitwise complement
 	}
 	
 	
+	// Takes the given run length symbol in the range [257, 287], possibly reads some more input bits,
+	// and returns a number in the range [3, 258]. This throws an IOException if bits needed to be read
+	// but the end of stream was reached or the underlying stream experienced an I/O exception.
 	private int decodeRunLength(int sym) throws IOException {
 		assert 257 <= sym && sym <= 287;
 		if (sym <= 264)
@@ -537,6 +568,9 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
+	// Takes the given run length symbol in the range [0, 31], possibly reads some more input bits,
+	// and returns a number in the range [1, 32768]. This throws an IOException if bits needed to
+	// be read but the end of stream was reached or the underlying stream experienced an I/O exception.
 	private int decodeDistance(int sym) throws IOException {
 		assert 0 <= sym && sym <= 31;
 		if (sym <= 3)
@@ -553,11 +587,11 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- I/O methods ----*/
 	
-	// Returns the given number of least significant bits from the bit buffer,
-	// which updates the bit buffer and possibly also the byte buffer.
+	// Returns the given number of least significant bits from the bit buffer.
+	// This updates the bit buffer state and possibly also the byte buffer state.
 	private int readBits(int numBits) throws IOException {
 		// Check arguments and invariants
-		assert 1 <= numBits && numBits <= 16;  // Max value used in DEFLATE is 16, but this method is designed to be valid for numBits <= 31
+		assert 1 <= numBits && numBits <= 16;  // Note: DEFLATE uses up to 16, but this method is correct up to 31
 		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
 		assert inputBitBuffer >>> inputBitBufferLength == 0;  // Ensure high-order bits are clean
 		
@@ -569,10 +603,10 @@ public final class InflaterInputStream extends FilterInputStream {
 			// Pack as many bytes as possible from input byte buffer into the bit buffer
 			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBufferLength - i);
 			long temp;  // Bytes packed in little endian
-			if (numBytes == 8) {  // ~90% hit rate
+			if (numBytes == 8) {
 				temp =     (((b[i]&0xFF) | (b[i+1]&0xFF)<<8 | (b[i+2]&0xFF)<<16 | b[i+3]<<24) & 0xFFFFFFFFL) |
 				    (long)((b[i+4]&0xFF) | (b[i+5]&0xFF)<<8 | (b[i+6]&0xFF)<<16 | b[i+7]<<24) << 32;
-			} else if (numBytes == 7) {  // ~5% hit rate
+			} else if (numBytes == 7) {
 				temp =     (((b[i]&0xFF) | (b[i+1]&0xFF)<<8 | (b[i+2]&0xFF)<<16 | b[i+3]<<24) & 0xFFFFFFFFL) |
 				    (long)((b[i+4]&0xFF) | (b[i+5]&0xFF)<<8 | (b[i+6]&0xFF)<<16) << 32;
 			} else if (numBytes == 6) {
@@ -594,10 +628,10 @@ public final class InflaterInputStream extends FilterInputStream {
 			inputBitBuffer |= temp << inputBitBufferLength;
 			inputBitBufferLength += numBytes << 3;
 			inputBufferIndex += numBytes;
-			assert inputBitBufferLength <= 64;
+			assert inputBitBufferLength <= 64;  // Can temporarily be 64
 		}
 		
-		// Extract bits to return
+		// Extract the bits to return
 		int result = (int)inputBitBuffer & ((1 << numBits) - 1);
 		inputBitBuffer >>>= numBits;
 		inputBitBufferLength -= numBits;
@@ -610,13 +644,16 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
+	// Reads exactly 'len' bytes from {the input buffers or underlying input stream} into the
+	// given array subrange. This method alters the input buffer states, may throw an IOException,
+	// and would destroy the decompressor state if EOF occurs before the read length is satisfied.
 	private void readBytes(byte[] b, int off, int len) throws IOException {
 		// Check bit buffer invariants
 		if (inputBitBufferLength < 0 || inputBitBufferLength > 63
 				|| inputBitBuffer >>> inputBitBufferLength != 0)
 			throw new AssertionError("Invalid input bit buffer state");
 		
-		// Unpack saved bits first
+		// First unpack saved bits
 		alignInputToByte();
 		for (; len > 0 && inputBitBufferLength >= 8; off++, len--) {
 			b[off] = (byte)inputBitBuffer;
@@ -634,7 +671,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			len -= n;
 		}
 		
-		// Read directly from input stream
+		// Read directly from input stream (without putting into input buffer)
 		while (len > 0) {
 			assert inputBufferIndex == inputBufferLength;
 			int n = in.read(b, off, len);
@@ -647,8 +684,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	
 	// Fills the input byte buffer with new data read from the underlying input stream.
-	// Requires the buffer to be fully consumed before being called.
-	// Sets inputBufferLength to a number in the range [-1, inputBuffer.length].
+	// Requires the buffer to be fully consumed before being called. This method sets
+	// inputBufferLength to a value in the range [-1, inputBuffer.length] and inputBufferIndex to 0.
 	private void fillInputBuffer() throws IOException {
 		if (state < -1)
 			throw new AssertionError("Must not read in this state");
@@ -666,7 +703,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
-	// Discards the remaining bits (0 to 7) in the current byte being read, if any.
+	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
 	private void alignInputToByte() {
 		int discard = inputBitBufferLength & 7;
 		inputBitBuffer >>>= discard;
