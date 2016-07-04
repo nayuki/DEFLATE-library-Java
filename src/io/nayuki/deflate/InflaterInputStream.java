@@ -78,7 +78,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			if (in.markSupported())
 				in.mark(0);
 			else
-				throw new IllegalArgumentException("Input stream not markable, can't detach");
+				throw new IllegalArgumentException("Input stream not markable, cannot support detachment");
 		}
 		
 		// Initialize data buffers
@@ -122,13 +122,13 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	
 	public int read(byte[] b, int off, int len) throws IOException {
-		// Check state and arguments
+		// Check arguments and state
+		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
+			throw new IndexOutOfBoundsException();
 		if (state == -2)
 			throw new IllegalStateException("Stream already closed");
 		if (state == -3)
 			throw new IOException("The stream contained invalid data");
-		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
-			throw new IndexOutOfBoundsException();
 		
 		int result = 0;  // Number of bytes filled in the array 'b'
 		
@@ -145,6 +145,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			if (result == len)
 				return result;
 		}
+		assert outputBufferLength == 0 && outputBufferIndex == 0 && result < len;
 		
 		// Get into a block if not already inside one
 		while (state == 0) {
@@ -245,6 +246,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	public void detach() throws IOException {
 		if (!isDetachable)
 			throw new IllegalStateException("Detachability not specified at construction");
+		if (in == null)
+			throw new IllegalStateException("Input stream already detached/closed");
 		
 		// Adjust over-consumed bytes
 		in.reset();
