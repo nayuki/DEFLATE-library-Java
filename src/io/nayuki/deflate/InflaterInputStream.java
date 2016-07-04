@@ -10,49 +10,58 @@ import java.util.Arrays;
 
 /**
  * Decompresses a DEFLATE data stream (raw format without zlib or gzip headers or footers) into a byte stream.
- * <p>Incomplete functionality - currently only supports uncompressed blocks.</p>
  */
 public final class InflaterInputStream extends FilterInputStream {
 	
 	/*---- Fields ----*/
+	
+	/* Data buffers */
 	
 	// Buffer of bytes read from in.read() (the underlying input stream)
 	private byte[] inputBuffer;     // Can have any positive length (but longer means less overhead)
 	private int inputBufferLength;  // Number of valid prefix bytes, or -1 to indicate end of stream
 	private int inputBufferIndex;   // Index of next byte to consume
 	
-	// Buffer of bits read from the bytes in 'inputBuffer'
+	// Buffer of bits packed from the bytes in 'inputBuffer'
 	private long inputBitBuffer;       // 0 <= value < 2^inputBitBufferLength
 	private int inputBitBufferLength;  // Always in the range [0, 63]
 	
-	// Buffer of bytes to yield when this.read() is called
+	// Queued bytes to yield first when this.read() is called
 	private byte[] outputBuffer;     // Should have length 257 (but pointless if longer)
-	private int outputBufferLength;  // Number of valid prefix bytes
-	private int outputBufferIndex;   // Index of next byte to produce
+	private int outputBufferLength;  // Number of valid prefix bytes, at least 0
+	private int outputBufferIndex;   // Index of next byte to produce, in the range [0, outputBufferLength]
 	
-	// Buffer of last 32 KiB of decoded data
-	private static final int DICTIONARY_LENGTH = 32 * 1024;
-	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
+	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
 	private byte[] dictionary;
 	private int dictionaryIndex;
 	
-	// -3: A data format exception has been thrown.
-	// -2: This inflater stream has been closed.
-	// -1: Currently processing a Huffman-compressed block.
-	// 0 to 65535: Number of bytes remaining in current uncompressed block.
+	
+	/* Configuration */
+	
+	// Indicates whether mark() should be called when the underlying
+	// input stream is read, and whether calling detach() is allowed.
+	private final boolean isDetachable;
+	
+	
+	/* State */
+	
+	// The state of the decompressor:
+	//   -3: A data format exception has been thrown.
+	//   -2: This inflater stream has been closed.
+	//   -1: Currently processing a Huffman-compressed block.
+	//   0 to 65535: Currently processing an uncompressed block, number of bytes remaining.
 	private int state;
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	private boolean isLastBlock;
 	
-	private final boolean isDetachable;
-	
-	private short[] literalLengthCodeTree;  // Must be null when and only when state != -1
-	private short[] distanceCodeTree;       // Must be null when state != -1
-	
+	// Current code trees for when state == -1. When state != -1, both must be null.
+	private short[] literalLengthCodeTree;  // When state == -1, this must be not null
+	private short[] distanceCodeTree;  // When state == -1, this can be null or not null
 	
 	
-	/*---- Public API methods ----*/
+	
+	/*---- Constructors ----*/
 	
 	public InflaterInputStream(InputStream in, boolean detachable) {
 		// Handle the input stream
@@ -86,6 +95,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	
 	
+	/*---- Public API methods ----*/
+	
 	public int read() throws IOException {
 		byte[] b = new byte[1];
 		while (true) {
@@ -113,6 +124,8 @@ public final class InflaterInputStream extends FilterInputStream {
 			throw new IndexOutOfBoundsException();
 		
 		int result = 0;  // Number of bytes filled in the array 'b'
+		
+		// First move bytes (if any) from the output buffer
 		if (outputBufferLength > 0) {
 			int n = Math.min(outputBufferLength - outputBufferIndex, len);
 			System.arraycopy(outputBuffer, outputBufferIndex, b, off, n);
@@ -126,13 +139,14 @@ public final class InflaterInputStream extends FilterInputStream {
 				return result;
 		}
 		
-		// Get into a block
+		// Get into a block if not already inside one
 		while (state == 0) {
 			if (isLastBlock)
 				return -1;
 			if (len == 0)
 				return 0;
 			
+			// Read and process block header
 			isLastBlock = readBits(1) == 1;
 			int type = readBits(2);
 			if (type == 0) {
@@ -153,8 +167,9 @@ public final class InflaterInputStream extends FilterInputStream {
 				throw new AssertionError();
 		}
 		
+		// Read the block's data into the argument array
 		if (1 <= state && state <= 0xFFFF) {
-			// Read from uncompressed block
+			// Read bytes from uncompressed block
 			int toRead = Math.min(state, len - result);
 			readBytes(b, off + result, toRead);
 			for (int i = 0; i < toRead; i++) {
@@ -166,6 +181,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			return result;
 			
 		} else if (state == -1) {
+			// Decode symbols from Huffman-coded block
 			while (result < len) {
 				int sym = decodeSymbol(literalLengthCodeTree);
 				assert 0 <= sym && sym <= 287;
@@ -200,7 +216,6 @@ public final class InflaterInputStream extends FilterInputStream {
 							outputBufferLength++;
 						}
 					}
-					
 				} else {  // sym == 256, end of block
 					literalLengthCodeTree = null;
 					distanceCodeTree = null;
@@ -605,9 +620,10 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
-	/*---- Static tables ----*/
+	/*---- Constants and tables ----*/
 	
-	private static final int[] CODE_LENGTH_CODE_ORDER = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+	private static final int[] CODE_LENGTH_CODE_ORDER =
+		{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 	
 	private static final short[] FIXED_LITERAL_LENGTH_CODE_TREE;
 	private static final short[] FIXED_DISTANCE_CODE_TREE;
@@ -623,12 +639,22 @@ public final class InflaterInputStream extends FilterInputStream {
 			byte[] distcodelens = new byte[32];
 			Arrays.fill(distcodelens, (byte)5);
 			
-			InflaterInputStream dummy = new InflaterInputStream(new ByteArrayInputStream(new byte[0]), false);
+			InflaterInputStream dummy = new InflaterInputStream(
+				new ByteArrayInputStream(new byte[0]), false);
 			FIXED_LITERAL_LENGTH_CODE_TREE = dummy.codeLengthsToCodeTree(llcodelens);
 			FIXED_DISTANCE_CODE_TREE = dummy.codeLengthsToCodeTree(distcodelens);
 		} catch (IOException e) {
 			throw new AssertionError(e);
 		}
 	}
+	
+	
+	// Must be a power of 2. Do not change this constant value. If the value is decreased, then
+	// decompression may produce different data that violates the DEFLATE spec (but no crashes).
+	// If the value is increased, the behavior stays the same but memory is wasted with no benefit.
+	private static final int DICTIONARY_LENGTH = 32 * 1024;
+	
+	// This is why the above must be a power of 2.
+	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
 	
 }
