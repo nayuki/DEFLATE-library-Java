@@ -509,22 +509,14 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	private int decodeSymbol(short[] codeTree) throws IOException {
 		int node = 0;
-		
-		int count = inputBitBufferLength;
-		if (count > 0) {  // Medium path using buffered bits
-			// Because of this truncation, the code tree depth needs to be no more than 32
-			int bits = (int)inputBitBuffer;
-			do {
-				node = codeTree[node + (bits & 1)];
-				bits >>>= 1;
-				count--;
-			} while (count > 0 && node >= 0);
-			inputBitBuffer >>>= inputBitBufferLength - count;
-		inputBitBufferLength = count;
+		while (node >= 0) {
+			if (inputBitBufferLength > 0) {  // Medium path using buffered bits
+				node = codeTree[node + ((int)inputBitBuffer & 1)];
+				inputBitBuffer >>>= 1;
+				inputBitBufferLength--;
+			} else  // Slow path with potential I/O operations
+				node = codeTree[node + readBits(1)];
 		}
-		
-		while (node >= 0)  // Slow path reading one bit at a time
-			node = codeTree[node + readBits(1)];
 		return ~node;  // Symbol encoded in bitwise complement
 	}
 	
