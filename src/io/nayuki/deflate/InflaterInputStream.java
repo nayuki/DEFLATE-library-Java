@@ -64,8 +64,15 @@ public final class InflaterInputStream extends FilterInputStream {
 	/*---- Constructors ----*/
 	
 	public InflaterInputStream(InputStream in, boolean detachable) {
-		// Handle the input stream
+		this(in, detachable, 16 * 1024);
+	}
+	
+	
+	public InflaterInputStream(InputStream in, boolean detachable, int inBufLen) {
+		// Handle the input stream and detachability
 		super(in);
+		if (inBufLen <= 0)
+			throw new IllegalArgumentException("Input buffer length must be positive");
 		isDetachable = detachable;
 		if (detachable) {
 			if (in.markSupported())
@@ -75,7 +82,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		}
 		
 		// Initialize data buffers
-		inputBuffer = new byte[16 * 1024];
+		inputBuffer = new byte[inBufLen];
 		inputBufferLength = 0;
 		inputBufferIndex = 0;
 		inputBitBuffer = 0;
