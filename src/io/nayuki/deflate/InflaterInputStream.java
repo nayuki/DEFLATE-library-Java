@@ -105,8 +105,8 @@ public final class InflaterInputStream extends FilterInputStream {
 	/*---- Public API methods ----*/
 	
 	public int read() throws IOException {
-		byte[] b = new byte[1];
 		while (true) {
+			byte[] b = new byte[1];
 			switch (read(b)) {
 				case 1:
 					return (b[0] & 0xFF);
@@ -136,7 +136,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		if (outputBufferLength > 0) {
 			int n = Math.min(outputBufferLength - outputBufferIndex, len);
 			System.arraycopy(outputBuffer, outputBufferIndex, b, off, n);
-			result += n;
+			result = n;
 			outputBufferIndex += n;
 			if (outputBufferIndex == outputBufferLength) {
 				outputBufferLength = 0;
@@ -155,23 +155,28 @@ public final class InflaterInputStream extends FilterInputStream {
 			
 			// Read and process block header
 			isLastBlock = readBits(1) == 1;
-			int type = readBits(2);
-			if (type == 0) {
-				alignInputToByte();
-				state = readBits(16);  // Block length
-				if (state != (readBits(16) ^ 0xFFFF))
-					invalidData("len/nlen mismatch in uncompressed block");
-			} else if (type == 1) {
-				state = -1;
-				literalLengthCodeTree = FIXED_LITERAL_LENGTH_CODE_TREE;
-				distanceCodeTree = FIXED_DISTANCE_CODE_TREE;
-			} else if (type == 2) {
-				state = -1;
-				decodeHuffmanCodes();
-			} else if (type == 3)
-				invalidData("Reserved block type");
-			else
-				throw new AssertionError();
+			switch (readBits(2)) {  // Type
+				case 0:
+					alignInputToByte();
+					state = readBits(16);  // Block length
+					if (state != (readBits(16) ^ 0xFFFF))
+						invalidData("len/nlen mismatch in uncompressed block");
+					break;
+				case 1:
+					state = -1;
+					literalLengthCodeTree = FIXED_LITERAL_LENGTH_CODE_TREE;
+					distanceCodeTree = FIXED_DISTANCE_CODE_TREE;
+					break;
+				case 2:
+					state = -1;
+					decodeHuffmanCodes();
+					break;
+				case 3:
+					invalidData("Reserved block type");
+					break;
+				default:
+					throw new AssertionError();
+			}
 		}
 		
 		// Read the block's data into the argument array
