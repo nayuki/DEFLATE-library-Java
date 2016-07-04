@@ -130,6 +130,11 @@ public final class InflaterInputStream extends FilterInputStream {
 		if (state == -3)
 			throw new IOException("The stream contained invalid data");
 		
+		// Special handling for empty read request
+		if (len == 0)
+			return (outputBufferLength > 0 || state != 0 || !isLastBlock) ? 0 : -1;
+		assert len > 0;
+		
 		int result = 0;  // Number of bytes filled in the array 'b'
 		
 		// First move bytes (if any) from the output buffer
@@ -151,8 +156,6 @@ public final class InflaterInputStream extends FilterInputStream {
 		while (state == 0) {
 			if (isLastBlock)
 				return -1;
-			if (len == 0)
-				return 0;
 			
 			// Read and process block header
 			isLastBlock = readBits(1) == 1;
