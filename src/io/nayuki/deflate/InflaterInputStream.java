@@ -46,10 +46,11 @@ public final class InflaterInputStream extends FilterInputStream {
 	/* State */
 	
 	// The state of the decompressor:
-	//   -3: A data format exception has been thrown.
-	//   -2: This inflater stream has been closed.
+	//   -3: This decompressor stream has been closed.
+	//   -2: A data format exception has been thrown.
 	//   -1: Currently processing a Huffman-compressed block.
-	//   0 to 65535: Currently processing an uncompressed block, number of bytes remaining.
+	//    0: Initial state, or a block just ended.
+	//   1 to 65535: Currently processing an uncompressed block, number of bytes remaining.
 	private int state;
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
@@ -167,9 +168,9 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Check arguments and state
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
 			throw new IndexOutOfBoundsException();
-		if (state == -2)
+		if (in == null)
 			throw new IllegalStateException("Stream already closed");
-		if (state == -3)
+		if (state == -2)
 			throw new IOException("The stream contained invalid data");
 		
 		// Special handling for empty read request
@@ -316,7 +317,13 @@ public final class InflaterInputStream extends FilterInputStream {
 				throw new EOFException();
 			skip -= n;
 		}
+		
 		in = null;
+		state = -3;
+		isLastBlock = true;
+		literalLengthCodeTree = null;
+		distanceCodeTree = null;
+		releaseBuffers();
 	}
 	
 	
@@ -327,19 +334,15 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * @throws IOException if an I/O exception occurred in the underlying stream
 	 */
 	public void close() throws IOException {
-		state = -2;
-		isLastBlock = true;
+		if (in == null)
+			return;
 		super.close();
-		
-		// Clear buffers
-		inputBuffer = null;
-		inputBufferLength = 0;
-		inputBufferIndex = 0;
-		inputBitBuffer = 0;
-		inputBitBufferLength = 0;
-		outputBuffer = null;
-		outputBufferLength = 0;
-		outputBufferIndex = 0;
+		in = null;
+		state = -3;
+		isLastBlock = true;
+		literalLengthCodeTree = null;
+		distanceCodeTree = null;
+		releaseBuffers();
 	}
 	
 	
@@ -639,13 +642,8 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Read directly from input stream
 		while (len > 0) {
 			int n = in.read(b, off, len);
-			if (n == -1) {
-				inputBufferIndex = 0;
-				inputBufferLength = -1;
-				state = -3;
-				isLastBlock = true;
-				throw new EOFException();
-			}
+			if (n == -1)
+				invalidData("Unexpected end of stream");
 			off += n;
 			len -= n;
 		}
@@ -656,17 +654,17 @@ public final class InflaterInputStream extends FilterInputStream {
 	// Requires the buffer to be fully consumed before being called.
 	// Sets inputBufferLength to a number in the range [-1, inputBuffer.length].
 	private void fillInputBuffer() throws IOException {
+		if (state < -1)
+			throw new AssertionError("Must not read in this state");
 		if (inputBufferIndex < inputBufferLength)
 			throw new AssertionError("Input buffer not fully consumed yet");
+		
 		if (isDetachable)
 			in.mark(inputBuffer.length);
 		inputBufferLength = in.read(inputBuffer);
 		inputBufferIndex = 0;
-		if (inputBufferLength == -1) {
-			state = -3;
-			isLastBlock = true;
-			throw new EOFException();
-		}
+		if (inputBufferLength == -1)
+			invalidData("Unexpected end of stream");  // Note: This sets inputBufferLength to 0
 		if (inputBufferLength < -1 || inputBufferLength > inputBuffer.length)
 			throw new AssertionError();
 	}
@@ -681,10 +679,34 @@ public final class InflaterInputStream extends FilterInputStream {
 	}
 	
 	
+	/*---- State management methods ----*/
+	
+	// Throws an IOException with the given reason, and destroys the state of this decompressor.
 	private void invalidData(String reason) throws IOException {
-		state = -3;
+		state = -2;
 		isLastBlock = true;
+		literalLengthCodeTree = null;
+		distanceCodeTree = null;
+		releaseBuffers();
+		// Do not set 'in' to null, so that calling close() is still possible
 		throw new IOException("Invalid DEFLATE data: " + reason);
+	}
+	
+	
+	// Sets all buffer arrays to null and related variables to 0.
+	// It is illegal to call read() or detach() after this method is called.
+	// The caller is responsible for manipulating other state variables appropriately.
+	private void releaseBuffers() {
+		inputBuffer = null;
+		inputBufferLength = 0;
+		inputBufferIndex = 0;
+		inputBitBuffer = 0;
+		inputBitBufferLength = 0;
+		outputBuffer = null;
+		outputBufferLength = 0;
+		outputBufferIndex = 0;
+		dictionary = null;
+		dictionaryIndex = 0;
 	}
 	
 	
