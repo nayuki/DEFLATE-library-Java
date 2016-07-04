@@ -362,14 +362,10 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * located at index 2.
 	 */
 	private short[] codeLengthsToCodeTree(byte[] codeLengths) throws IOException {
-		final short UNUSED  = 0x7000;
-		final short OPENING = 0x7001;
-		final short OPEN    = 0x7002;
-		
 		short[] result = new short[(codeLengths.length - 1) * 2];  // Worst-case allocation if all symbols are present
-		Arrays.fill(result, UNUSED);
-		result[0] = OPEN;
-		result[1] = OPEN;
+		Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
+		result[0] = CODE_TREE_OPEN_SLOT;
+		result[1] = CODE_TREE_OPEN_SLOT;
 		int allocated = 2;  // Always even in this algorithm
 		
 		int maxCodeLen = 0;
@@ -395,7 +391,7 @@ public final class InflaterInputStream extends FilterInputStream {
 					break middle;  // No more symbols to process
 				
 				// Find next open child slot
-				while (resultIndex < result.length && result[resultIndex] != OPEN)
+				while (resultIndex < result.length && result[resultIndex] != CODE_TREE_OPEN_SLOT)
 					resultIndex++;
 				if (resultIndex == result.length)  // No more slots left; tree over-full
 					invalidData("This canonical code does not represent a Huffman code tree");
@@ -407,27 +403,21 @@ public final class InflaterInputStream extends FilterInputStream {
 			}
 			
 			// Take all open slots and deepen them by one level
-			for (; resultIndex < result.length; resultIndex++) {
-				if (result[resultIndex] == OPEN) {
+			for (int end = allocated; resultIndex < end; resultIndex++) {
+				if (result[resultIndex] == CODE_TREE_OPEN_SLOT) {
 					// Allocate a new node
 					assert allocated + 2 <= result.length;
 					result[resultIndex] = (short)allocated;
-					result[allocated + 0] = OPENING;
-					result[allocated + 1] = OPENING;
+					result[allocated + 0] = CODE_TREE_OPEN_SLOT;
+					result[allocated + 1] = CODE_TREE_OPEN_SLOT;
 					allocated += 2;
 				}
-			}
-			
-			// Do post-processing so we don't open slots that were just opened
-			for (resultIndex = 0; resultIndex < result.length; resultIndex++) {
-				if (result[resultIndex] == OPENING)
-					result[resultIndex] = OPEN;
 			}
 		}
 		
 		// Check for under-full tree after all symbols are allocated
 		for (int i = 0; i < allocated; i++) {
-			if (result[i] == OPEN)
+			if (result[i] == CODE_TREE_OPEN_SLOT)
 				invalidData("This canonical code does not represent a Huffman code tree");
 		}
 		
@@ -656,5 +646,9 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	// This is why the above must be a power of 2.
 	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
+	
+	
+	private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
+	private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
 	
 }
