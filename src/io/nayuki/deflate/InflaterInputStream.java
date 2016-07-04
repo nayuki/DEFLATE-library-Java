@@ -465,19 +465,17 @@ public final class InflaterInputStream extends FilterInputStream {
 			
 			// Allocate all symbols of current code length to open slots in ascending order
 			int resultIndex = 0;
-			int symbol = 0;
-			middle:
-			while (true) {
+			for (int symbol = 0; ; ) {
 				// Find next symbol having current code length
 				while (symbol < codeLengths.length && codeLengths[symbol] != curCodeLen)
 					symbol++;
 				if (symbol == codeLengths.length)
-					break middle;  // No more symbols to process
+					break;  // No more symbols to process
 				
 				// Find next open child slot
-				while (resultIndex < result.length && result[resultIndex] != CODE_TREE_OPEN_SLOT)
+				while (resultIndex < allocated && result[resultIndex] != CODE_TREE_OPEN_SLOT)
 					resultIndex++;
-				if (resultIndex == result.length)  // No more slots left; tree over-full
+				if (resultIndex == allocated)  // No more slots left
 					invalidData("Canonical code fails to produce full Huffman code tree");
 				
 				// Put the symbol in the slot and increment
