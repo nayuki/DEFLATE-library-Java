@@ -695,7 +695,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			assert inputBufferIndex == inputBufferLength;
 			int n = in.read(b, off, len);
 			if (n == -1)
-				destroyAndThrow(new DataFormatException("Unexpected end of stream"));
+				destroyAndThrow(new EOFException("Unexpected end of stream"));
 			off += n;
 			len -= n;
 		}
@@ -716,7 +716,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBufferLength = in.read(inputBuffer);
 		inputBufferIndex = 0;
 		if (inputBufferLength == -1)
-			destroyAndThrow(new DataFormatException("Unexpected end of stream"));  // Note: This sets inputBufferLength to 0
+			destroyAndThrow(new EOFException("Unexpected end of stream"));  // Note: This sets inputBufferLength to 0
 		if (inputBufferLength < -1 || inputBufferLength > inputBuffer.length)
 			throw new AssertionError();
 	}

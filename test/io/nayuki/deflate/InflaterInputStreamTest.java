@@ -10,6 +10,7 @@ package io.nayuki.deflate;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.Random;
 import org.junit.Assert;
@@ -59,7 +60,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testEofStartOfBlock() throws IOException {
 		// No blocks
 		test("", "");
@@ -73,7 +74,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testEofInBlockType() throws IOException {
 		// Partial block type
 		test("1 0", "");
@@ -102,14 +103,14 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testUncompressedEofBeforeLength() throws IOException {
 		// Uncompressed block (partial padding) (no length)
 		test("1 00 000", "");
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testUncompressedEofInLength() throws IOException {
 		// Uncompressed block (partial length)
 		test("1 00 00000 0000000000", "");
@@ -123,14 +124,14 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testUncompressedEofInData() throws IOException {
 		// Uncompressed block len=6: 55 EE (End)
 		test("1 00 11111 0110000000000000 1001111111111111 10101010 01110111", "");
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testUncompressedBlockNoFinalBlock() throws IOException {
 		// Uncompressed block len=0: (empty)
 		// No final block
@@ -209,21 +210,21 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testFixedHuffmanEofInHuffmanSymbol() throws IOException {
 		// Fixed Huffman block: (partial symbol)
 		test("1 10 00000", "");
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testFixedHuffmanEofInRunExtensionBits() throws IOException {
 		// Fixed Huffman block: 00 #269+1(partial)
 		test("1 10 00110000 0001101 1", "");
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=EOFException.class)
 	public void testFixedHuffmanEofInDistanceExtensionBits() throws IOException {
 		// Fixed Huffman block: 00 #285 #0 #257 #8+00(partial)
 		test("1 10 00110000 11000101 00000 0000001 01000 00", "");
