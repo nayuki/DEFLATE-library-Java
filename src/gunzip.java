@@ -1,9 +1,9 @@
 /* 
- * Fast DEFLATE implementation
+ * DEFLATE library (Java)
+ * Copyright (c) Project Nayuki
  * 
- * Copyright (c) 2014 Project Nayuki
- * All rights reserved. Contact Nayuki for licensing.
- * https://www.nayuki.io/page/fast-deflate-implementation
+ * https://www.nayuki.io/page/deflate-library-java
+ * https://github.com/nayuki/DEFLATE-library-Java
  */
 
 import java.io.EOFException;
