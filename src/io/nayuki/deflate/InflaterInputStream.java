@@ -954,6 +954,15 @@ public final class InflaterInputStream extends FilterInputStream {
 	private static final short[] FIXED_DISTANCE_CODE_TREE;
 	private static final short[] FIXED_DISTANCE_CODE_TABLE;
 	
+	// For use in codeLengthsToCodeTree() only.
+	private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
+	private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
+	
+	// Any integer from 1 to 15 is valid. Affects speed but produces same output.
+	private static final int CODE_TABLE_BITS = 9;
+	private static final int CODE_TABLE_MASK = (1 << CODE_TABLE_BITS) - 1;
+	
+	
 	static {
 		byte[] llcodelens = new byte[288];
 		Arrays.fill(llcodelens,   0, 144, (byte)8);
@@ -982,16 +991,6 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	// This is why the above must be a power of 2.
 	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
-	
-	
-	// For use in codeLengthsToCodeTree() only.
-	private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
-	private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
-	
-	
-	// Any integer from 1 to 15 is valid. Affects speed but produces same output.
-	private static final int CODE_TABLE_BITS = 9;
-	private static final int CODE_TABLE_MASK = (1 << CODE_TABLE_BITS) - 1;
 	
 	
 	// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i] =
