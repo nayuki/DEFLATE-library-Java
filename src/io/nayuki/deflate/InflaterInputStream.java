@@ -62,7 +62,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	/* State */
 	
 	// The state of the decompressor:
-	//   -3: This decompressor stream has been closed.
+	//   -3: This decompressor stream has been closed. Equivalent to in == null.
 	//   -2: A data format exception has been thrown.
 	//   -1: Currently processing a Huffman-compressed block.
 	//    0: Initial state, or a block just ended.
@@ -318,6 +318,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	/**
 	 * Detaches the underlying input stream from this decompressor. This puts the underlying stream
 	 * at the position of the first byte after the data that this decompressor actually consumed.
+	 * Calling {@code detach()} invalidates this stream object but doesn't close the underlying stream.
 	 * <p>This method exists because for efficiency, the decompressor may read more bytes from the
 	 * underlying stream than necessary to produce the decompressed data. If you want to continue
 	 * reading the underlying stream exactly after the point the DEFLATE-compressed data ends,
@@ -332,6 +333,8 @@ public final class InflaterInputStream extends FilterInputStream {
 			throw new IllegalStateException("Detachability not specified at construction");
 		if (in == null)
 			throw new IllegalStateException("Input stream already detached/closed");
+		if (state == -2)
+			throw new IllegalStateException("Cannot detach from a stream with errors");
 		
 		// Rewind the underlying stream, then skip over bytes that were already consumed.
 		// Note that a byte with some bits consumed is considered to be fully consumed.
@@ -628,7 +631,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				temp = 0;
 				for (int j = 0; j < numBytes; i++, j++)
 					temp |= (b[i] & 0xFFL) << (j << 3);
-			} else if (numBytes == 0 && inputBufferLength != -1) {
+			} else if (numBytes == 0) {
 				// Fill and retry
 				fillInputBuffer();
 				continue;
@@ -792,6 +795,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
 	
 	
+	// For use in codeLengthsToCodeTree() only.
 	private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
 	private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
 	
