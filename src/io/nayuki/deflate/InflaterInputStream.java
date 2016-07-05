@@ -350,10 +350,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		
 		in = null;
 		state = -3;
-		isLastBlock = true;
-		literalLengthCodeTree = null;
-		distanceCodeTree = null;
-		releaseBuffers();
+		destroyState();
 	}
 	
 	
@@ -369,10 +366,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		super.close();
 		in = null;
 		state = -3;
-		isLastBlock = true;
-		literalLengthCodeTree = null;
-		distanceCodeTree = null;
-		releaseBuffers();
+		destroyState();
 	}
 	
 	
@@ -731,19 +725,20 @@ public final class InflaterInputStream extends FilterInputStream {
 	// Throws an IOException with the given reason, and destroys the state of this decompressor.
 	private void invalidData(String reason) throws IOException {
 		state = -2;
-		isLastBlock = true;
-		literalLengthCodeTree = null;
-		distanceCodeTree = null;
-		releaseBuffers();
+		destroyState();
 		// Do not set 'in' to null, so that calling close() is still possible
 		throw new IOException("Invalid DEFLATE data: " + reason);
 	}
 	
 	
-	// Sets all buffer arrays to null and related variables to 0.
-	// It is illegal to call read() or detach() after this method is called.
-	// The caller is responsible for manipulating other state variables appropriately.
-	private void releaseBuffers() {
+	// Clears all state variables except 'in' and 'state', to prevent accidental use of the
+	// stream thereafter. It is illegal to call read() or detach() after this method is called.
+	// The caller is responsible for manipulating the other state variables appropriately.
+	private void destroyState() {
+		isLastBlock = true;
+		literalLengthCodeTree = null;
+		distanceCodeTree = null;
+		
 		inputBuffer = null;
 		inputBufferLength = 0;
 		inputBufferIndex = 0;
