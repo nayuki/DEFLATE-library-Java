@@ -277,76 +277,182 @@ public final class InflaterInputStream extends FilterInputStream {
 		} else if (state == -1) {
 			// Decode symbols from Huffman-coded block
 			while (result < len) {
-				// Decode next literal/length symbol
-				int sym;
-				if (inputBitBufferLength >= CODE_TABLE_BITS) {  // Fast path
-					int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
-					assert temp >= 0;  // No need to mask off sign extension bits
-					int consumed = temp >>> 11;
-					inputBitBuffer >>>= consumed;
-					inputBitBufferLength -= consumed;
-					int node = (temp << 21) >> 21;  // Sign extension from 11 bits
-					while (node >= 0)  // Trailing slow path
-						node = literalLengthCodeTree[node + readBits(1)];
-					sym = ~node;
-				} else  // Medium path
-					sym = decodeSymbol(literalLengthCodeTree);
+				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
+				if (inputBitBufferLength < 48) {
+					byte[] c = inputBuffer;  // Shorter name
+					int i = inputBufferIndex;  // Shorter name
+					int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBufferLength - i);
+					assert 0 <= numBytes && numBytes <= 8;
+					if (numBytes == 2) {  // Only implement special cases that occur frequently in practice
+						inputBitBuffer |= (long)((c[i]&0xFF) | (c[i+1]&0xFF)<<8) << inputBitBufferLength;
+						inputBitBufferLength += 2 * 8;
+						inputBufferIndex += 2;
+					} else if (numBytes == 3) {
+						inputBitBuffer |= (long)((c[i]&0xFF) | (c[i+1]&0xFF)<<8 | (c[i+2]&0xFF)<<16) << inputBitBufferLength;
+						inputBitBufferLength += 3 * 8;
+						inputBufferIndex += 3;
+					} else if (numBytes == 4) {
+						inputBitBuffer |= (((c[i]&0xFF) | (c[i+1]&0xFF)<<8 | (c[i+2]&0xFF)<<16 | c[i+3]<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
+						inputBitBufferLength += 4 * 8;
+						inputBufferIndex += 4;
+					} else {  // This slower general logic is valid for 0 <= numBytes <= 8
+						for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8, inputBufferIndex++)
+							inputBitBuffer |= (c[inputBufferIndex] & 0xFFL) << inputBitBufferLength;
+					}
+				}
 				
-				// Handle the symbol by ranges
-				assert 0 <= sym && sym <= 287;
-				if (sym < 256) {  // Literal byte
-					b[off + result] = (byte)sym;
-					dictionary[dictionaryIndex] = (byte)sym;
-					dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-					result++;
-				} else if (sym > 256) {  // Length and distance for copying
-					int run = decodeRunLength(sym);
-					assert 3 <= run && run <= 258;
-					if (distanceCodeTree == null)
-						destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
-					
-					// Decode next distance symbol
-					int distSym;
-					if (inputBitBufferLength >= CODE_TABLE_BITS) {  // Fast path
-						int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+				// The worst-case number of bits consumed in one iteration:
+				//   length (symbol (15) + extra (5)) + distance (symbol (15) + extra (13)) = 48.
+				// This allows us to do decoding entirely from the bit buffer, avoiding the byte buffer or actual I/O.
+				if (inputBitBufferLength >= 48) {  // Fast path
+					// Decode next literal/length symbol (a customized version of decodeSymbol())
+					int sym;
+					{
+						int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
 						assert temp >= 0;  // No need to mask off sign extension bits
 						int consumed = temp >>> 11;
 						inputBitBuffer >>>= consumed;
 						inputBitBufferLength -= consumed;
 						int node = (temp << 21) >> 21;  // Sign extension from 11 bits
-						while (node >= 0)  // Trailing slow path
-							node = distanceCodeTree[node + readBits(1)];
-						distSym = ~node;
-					} else  // Medium path
-						distSym = decodeSymbol(distanceCodeTree);
-					
-					assert 0 <= distSym && distSym <= 31;
-					int dist = decodeDistance(distSym);
-					assert 1 <= dist && dist <= 32768;
-					
-					// Copy bytes to output and dictionary
-					int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-					for (int i = 0; i < run; i++) {
-						byte bb = dictionary[dictReadIndex];
-						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-						dictionary[dictionaryIndex] = bb;
-						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						if (result < len) {
-							b[off + result] = bb;
-							result++;
-						} else {
-							assert outputBufferLength < outputBuffer.length;
-							outputBuffer[outputBufferLength] = bb;
-							outputBufferLength++;
+						while (node >= 0) {
+							node = literalLengthCodeTree[node + ((int)inputBitBuffer & 1)];
+							inputBitBuffer >>>= 1;
+							inputBitBufferLength--;
 						}
+						sym = ~node;
 					}
-				} else {  // sym == 256, end of block
-					literalLengthCodeTree = null;
-					literalLengthCodeTable = null;
-					distanceCodeTree = null;
-					distanceCodeTable = null;
-					state = 0;
-					break;
+					
+					// Handle the symbol by ranges
+					assert 0 <= sym && sym <= 287;
+					if (sym < 256) {  // Literal byte
+						b[off + result] = (byte)sym;
+						dictionary[dictionaryIndex] = (byte)sym;
+						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						result++;
+						
+					} else if (sym > 256) {  // Length and distance for copying
+						// Decode the run length (a customized version of decodeRunLength())
+						int run;
+						assert 257 <= sym && sym <= 287;
+						if (sym <= 264)
+							run = sym - 254;
+						else if (sym <= 284) {
+							int numExtraBits = (sym - 261) >>> 2;
+							run = ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + ((int)inputBitBuffer & ((1 << numExtraBits) - 1));
+							inputBitBuffer >>>= numExtraBits;
+							inputBitBufferLength -= numExtraBits;
+						} else if (sym == 285)
+							run = 258;
+						else {  // sym is 286 or 287
+							destroyAndThrow(new DataFormatException("Reserved run length symbol: " + sym));
+							throw new AssertionError("Unreachable");
+						}
+						assert 3 <= run && run <= 258;
+						
+						// Decode next distance symbol (a customized version of decodeSymbol())
+						if (distanceCodeTree == null)
+							destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
+						int distSym;
+						{
+							int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+							assert temp >= 0;  // No need to mask off sign extension bits
+							int consumed = temp >>> 11;
+							inputBitBuffer >>>= consumed;
+							inputBitBufferLength -= consumed;
+							int node = (temp << 21) >> 21;  // Sign extension from 11 bits
+							while (node >= 0) {  // Medium path
+								node = distanceCodeTree[node + ((int)inputBitBuffer & 1)];
+								inputBitBuffer >>>= 1;
+								inputBitBufferLength--;
+							}
+							distSym = ~node;
+						}
+						assert 0 <= distSym && distSym <= 31;
+						
+						// Decode the distance (a customized version of decodeDistance())
+						int dist;
+						if (distSym <= 3)
+							dist = distSym + 1;
+						else if (distSym <= 29) {
+							int numExtraBits = (distSym >>> 1) - 1;
+							dist = (((distSym & 1) | 2) << numExtraBits) + 1 + ((int)inputBitBuffer & ((1 << numExtraBits) - 1));
+							inputBitBuffer >>>= numExtraBits;
+							inputBitBufferLength -= numExtraBits;
+						} else {  // distSym is 30 or 31
+							destroyAndThrow(new DataFormatException("Reserved distance symbol: " + distSym));
+							throw new AssertionError("Unreachable");
+						}
+						assert 1 <= dist && dist <= 32768;
+						assert inputBitBufferLength >= 0;
+						
+						// Copy bytes to output and dictionary
+						int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
+						for (int i = 0; i < run; i++) {
+							byte bb = dictionary[dictReadIndex];
+							dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+							dictionary[dictionaryIndex] = bb;
+							dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+							if (result < len) {
+								b[off + result] = bb;
+								result++;
+							} else {
+								assert outputBufferLength < outputBuffer.length;
+								outputBuffer[outputBufferLength] = bb;
+								outputBufferLength++;
+							}
+						}
+						
+					} else {  // sym == 256, end of block
+						literalLengthCodeTree = null;
+						literalLengthCodeTable = null;
+						distanceCodeTree = null;
+						distanceCodeTable = null;
+						state = 0;
+						break;
+					}
+					
+				} else {  // General case (always correct), when not enough bits in buffer to guarantee reading
+					int sym = decodeSymbol(literalLengthCodeTree);
+					assert 0 <= sym && sym <= 287;
+					if (sym < 256) {  // Literal byte
+						b[off + result] = (byte)sym;
+						dictionary[dictionaryIndex] = (byte)sym;
+						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						result++;
+					} else if (sym > 256) {  // Length and distance for copying
+						int run = decodeRunLength(sym);
+						assert 3 <= run && run <= 258;
+						if (distanceCodeTree == null)
+							destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
+						int distSym = decodeSymbol(distanceCodeTree);
+						assert 0 <= distSym && distSym <= 31;
+						int dist = decodeDistance(distSym);
+						assert 1 <= dist && dist <= 32768;
+						
+						// Copy bytes to output and dictionary
+						int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
+						for (int i = 0; i < run; i++) {
+							byte bb = dictionary[dictReadIndex];
+							dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+							dictionary[dictionaryIndex] = bb;
+							dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+							if (result < len) {
+								b[off + result] = bb;
+								result++;
+							} else {
+								assert outputBufferLength < outputBuffer.length;
+								outputBuffer[outputBufferLength] = bb;
+								outputBufferLength++;
+							}
+						}
+					} else {  // sym == 256, end of block
+						literalLengthCodeTree = null;
+						literalLengthCodeTable = null;
+						distanceCodeTree = null;
+						distanceCodeTable = null;
+						state = 0;
+						break;
+					}
 				}
 			}
 			return result;
