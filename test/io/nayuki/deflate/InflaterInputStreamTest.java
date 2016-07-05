@@ -410,7 +410,7 @@ public final class InflaterInputStreamTest {
 		while (inputBits.length() % 8 != 0)
 			inputBits += "0";
 		
-		// Perform decompression and checking
+		// Perform decompression with block reads and check output
 		ByteArrayOutputStream bout = new ByteArrayOutputStream();
 		InflaterInputStream iin = new InflaterInputStream(new StringInputStream(inputBits), false);
 		byte[] buf = new byte[rand.nextInt(10) + 1];
@@ -419,6 +419,17 @@ public final class InflaterInputStreamTest {
 			if (n == -1)
 				break;
 			bout.write(buf, 0, n);
+		}
+		Assert.assertArrayEquals(refOut, bout.toByteArray());
+		
+		// Perform decompression with single-byte reads and check output
+		bout = new ByteArrayOutputStream();
+		iin = new InflaterInputStream(new StringInputStream(inputBits), false);
+		while (true) {
+			int b = iin.read();
+			if (b == -1)
+				break;
+			bout.write(b);
 		}
 		Assert.assertArrayEquals(refOut, bout.toByteArray());
 	}
