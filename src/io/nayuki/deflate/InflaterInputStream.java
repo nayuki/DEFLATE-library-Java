@@ -277,6 +277,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		} else if (state == -1) {
 			// Decode symbols from Huffman-coded block
 			while (result < len) {
+				// Decode next literal/length symbol
 				int sym;
 				if (inputBitBufferLength >= CODE_TABLE_BITS) {  // Fast path
 					int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
@@ -290,6 +291,8 @@ public final class InflaterInputStream extends FilterInputStream {
 					sym = ~node;
 				} else  // Medium path
 					sym = decodeSymbol(literalLengthCodeTree);
+				
+				// Handle the symbol by ranges
 				assert 0 <= sym && sym <= 287;
 				if (sym < 256) {  // Literal byte
 					b[off + result] = (byte)sym;
@@ -301,6 +304,8 @@ public final class InflaterInputStream extends FilterInputStream {
 					assert 3 <= run && run <= 258;
 					if (distanceCodeTree == null)
 						destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
+					
+					// Decode next distance symbol
 					int distSym;
 					if (inputBitBufferLength >= CODE_TABLE_BITS) {  // Fast path
 						int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
@@ -314,6 +319,7 @@ public final class InflaterInputStream extends FilterInputStream {
 						distSym = ~node;
 					} else  // Medium path
 						distSym = decodeSymbol(distanceCodeTree);
+					
 					assert 0 <= distSym && distSym <= 31;
 					int dist = decodeDistance(distSym);
 					assert 1 <= dist && dist <= 32768;
@@ -706,7 +712,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				temp =     (((b[i]&0xFF) | (b[i+1]&0xFF)<<8 | (b[i+2]&0xFF)<<16 | b[i+3]<<24) & 0xFFFFFFFFL) |
 				    (long)((b[i+4]&0xFF) | (b[i+5]&0xFF)<<8) << 32;
 			} else if (numBytes > 0) {
-				// This slower general logic is valid for 1 <= bytes <= 8
+				// This slower general logic is valid for 0 <= numBytes <= 8
 				temp = 0;
 				for (int j = 0; j < numBytes; i++, j++)
 					temp |= (b[i] & 0xFFL) << (j << 3);
