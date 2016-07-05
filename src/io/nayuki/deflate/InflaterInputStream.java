@@ -277,7 +277,19 @@ public final class InflaterInputStream extends FilterInputStream {
 		} else if (state == -1) {
 			// Decode symbols from Huffman-coded block
 			while (result < len) {
-				int sym = decodeSymbol(literalLengthCodeTree);
+				int sym;
+				if (inputBitBufferLength >= CODE_TABLE_BITS) {  // Fast path
+					int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+					assert temp >= 0;  // No need to mask off sign extension bits
+					int consumed = temp >>> 11;
+					inputBitBuffer >>>= consumed;
+					inputBitBufferLength -= consumed;
+					int node = (temp << 21) >> 21;  // Sign extension from 11 bits
+					while (node >= 0)  // Trailing slow path
+						node = literalLengthCodeTree[node + readBits(1)];
+					sym = ~node;
+				} else  // Medium path
+					sym = decodeSymbol(literalLengthCodeTree);
 				assert 0 <= sym && sym <= 287;
 				if (sym < 256) {  // Literal byte
 					b[off + result] = (byte)sym;
@@ -289,7 +301,19 @@ public final class InflaterInputStream extends FilterInputStream {
 					assert 3 <= run && run <= 258;
 					if (distanceCodeTree == null)
 						destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
-					int distSym = decodeSymbol(distanceCodeTree);
+					int distSym;
+					if (inputBitBufferLength >= CODE_TABLE_BITS) {  // Fast path
+						int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+						assert temp >= 0;  // No need to mask off sign extension bits
+						int consumed = temp >>> 11;
+						inputBitBuffer >>>= consumed;
+						inputBitBufferLength -= consumed;
+						int node = (temp << 21) >> 21;  // Sign extension from 11 bits
+						while (node >= 0)  // Trailing slow path
+							node = distanceCodeTree[node + readBits(1)];
+						distSym = ~node;
+					} else  // Medium path
+						distSym = decodeSymbol(distanceCodeTree);
 					assert 0 <= distSym && distSym <= 31;
 					int dist = decodeDistance(distSym);
 					assert 1 <= dist && dist <= 32768;
