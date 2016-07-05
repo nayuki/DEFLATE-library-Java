@@ -342,20 +342,17 @@ public final class InflaterInputStream extends FilterInputStream {
 					
 				} else if (sym > 256) {  // Length and distance for copying
 					// Decode the run length (a customized version of decodeRunLength())
-					int run;
 					assert 257 <= sym && sym <= 287;
-					if (sym <= 264)
-						run = sym - 254;
-					else if (sym <= 284) {
-						int numExtraBits = (sym - 261) >>> 2;
-						run = ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + ((int)inputBitBuffer & ((1 << numExtraBits) - 1));
+					if (sym > 285)
+						destroyAndThrow(new DataFormatException("Reserved run length symbol: " + sym));
+					int run;
+					{
+						int temp = RUN_LENGTH_TABLE[sym - 257];
+						run = temp >>> 3;
+						int numExtraBits = temp & 7;
+						run += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
 						inputBitBuffer >>>= numExtraBits;
 						inputBitBufferLength -= numExtraBits;
-					} else if (sym == 285)
-						run = 258;
-					else {  // sym is 286 or 287
-						destroyAndThrow(new DataFormatException("Reserved run length symbol: " + sym));
-						throw new AssertionError("Unreachable");
 					}
 					assert 3 <= run && run <= 258;
 					
@@ -380,17 +377,16 @@ public final class InflaterInputStream extends FilterInputStream {
 					assert 0 <= distSym && distSym <= 31;
 					
 					// Decode the distance (a customized version of decodeDistance())
+					if (distSym > 29)
+						destroyAndThrow(new DataFormatException("Reserved distance symbol: " + distSym));
 					int dist;
-					if (distSym <= 3)
-						dist = distSym + 1;
-					else if (distSym <= 29) {
-						int numExtraBits = (distSym >>> 1) - 1;
-						dist = (((distSym & 1) | 2) << numExtraBits) + 1 + ((int)inputBitBuffer & ((1 << numExtraBits) - 1));
+					{
+						int temp = DISTANCE_TABLE[distSym];
+						dist = temp >>> 4;
+						int numExtraBits = temp & 0xF;
+						dist += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
 						inputBitBuffer >>>= numExtraBits;
 						inputBitBufferLength -= numExtraBits;
-					} else {  // distSym is 30 or 31
-						destroyAndThrow(new DataFormatException("Reserved distance symbol: " + distSym));
-						throw new AssertionError("Unreachable");
 					}
 					assert 1 <= dist && dist <= 32768;
 					assert inputBitBufferLength >= 0;
@@ -996,5 +992,16 @@ public final class InflaterInputStream extends FilterInputStream {
 	// Any integer from 1 to 15 is valid. Affects speed but produces same output.
 	private static final int CODE_TABLE_BITS = 9;
 	private static final int CODE_TABLE_MASK = (1 << CODE_TABLE_BITS) - 1;
+	
+	
+	// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i] =
+	// (base of run length) << 3 | (number of extra bits to read).
+	private static final short[] RUN_LENGTH_TABLE = {24, 32, 40, 48, 56, 64, 72, 80, 89, 105, 121, 137,
+		154, 186, 218, 250, 283, 347, 411, 475, 540, 668, 796, 924, 1053, 1309, 1565, 1821, 2064};
+	
+	// For length symbols from 0 to 29 (inclusive). DISTANCE_TABLE[i] =
+	// (base of distance) << 4 | (number of extra bits to read).
+	private static final int[] DISTANCE_TABLE = {16, 32, 48, 64, 81, 113, 146, 210, 275, 403, 532, 788, 1045, 1557,
+		2070, 3094, 4119, 6167, 8216, 12312, 16409, 24601, 32794, 49178, 65563, 98331, 131100, 196636, 262173, 393245};
 	
 }
