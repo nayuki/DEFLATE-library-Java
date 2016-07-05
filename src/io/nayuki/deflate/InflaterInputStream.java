@@ -274,11 +274,10 @@ public final class InflaterInputStream extends FilterInputStream {
 			state -= toRead;
 			return result;
 			
-		} else if (state == -1) {
-			// Decode symbols from Huffman-coded block
+		} else if (state == -1)  // Decode symbols from Huffman-coded block
 			return result + readInsideHuffmanBlock(b, off + result, len - result);
-		} else
-			throw new AssertionError();
+		else
+			throw new AssertionError("Impossible state");
 	}
 	
 	
