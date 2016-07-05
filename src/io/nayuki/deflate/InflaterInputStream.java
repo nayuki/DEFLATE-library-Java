@@ -387,18 +387,29 @@ public final class InflaterInputStream extends FilterInputStream {
 						
 						// Copy bytes to output and dictionary
 						int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-						for (int i = 0; i < run; i++) {
-							byte bb = dictionary[dictReadIndex];
-							dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-							dictionary[dictionaryIndex] = bb;
-							dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-							if (result < len) {
+						if (len - result >= run) {  // Nice case with less branching
+							for (int i = 0; i < run; i++) {
+								byte bb = dictionary[dictReadIndex];
+								dictionary[dictionaryIndex] = bb;
 								b[off + result] = bb;
+								dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+								dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 								result++;
-							} else {
-								assert outputBufferLength < outputBuffer.length;
-								outputBuffer[outputBufferLength] = bb;
-								outputBufferLength++;
+							}
+						} else {  // General case
+							for (int i = 0; i < run; i++) {
+								byte bb = dictionary[dictReadIndex];
+								dictionary[dictionaryIndex] = bb;
+								dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+								dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+								if (result < len) {
+									b[off + result] = bb;
+									result++;
+								} else {
+									assert outputBufferLength < outputBuffer.length;
+									outputBuffer[outputBufferLength] = bb;
+									outputBufferLength++;
+								}
 							}
 						}
 						
