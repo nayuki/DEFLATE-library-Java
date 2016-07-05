@@ -8,7 +8,6 @@
 
 package io.nayuki.deflate;
 
-import java.io.ByteArrayInputStream;
 import java.io.EOFException;
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -385,7 +384,13 @@ public final class InflaterInputStream extends FilterInputStream {
 		byte[] codeLenCodeLen = new byte[19];  // This array is filled in a strange order
 		for (int i = 0; i < numCodeLenCodes; i++)
 			codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
-		short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
+		short[] codeLenCodeTree;
+		try {
+			codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
+		} catch (DataFormatException e) {
+			destroyAndThrow(e);
+			throw new AssertionError("Unreachable");
+		}
 		
 		// Read the main code lengths and handle runs
 		byte[] codeLens = new byte[numLitLenCodes + numDistCodes];
@@ -421,7 +426,12 @@ public final class InflaterInputStream extends FilterInputStream {
 		
 		// Create literal-length code tree
 		byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
-		literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
+		try {
+			literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
+		} catch (DataFormatException e) {
+			destroyAndThrow(e);
+			throw new AssertionError("Unreachable");
+		}
 		
 		// Create distance code tree with some extra processing
 		byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
@@ -444,7 +454,12 @@ public final class InflaterInputStream extends FilterInputStream {
 				distCodeLen = Arrays.copyOf(distCodeLen, 32);
 				distCodeLen[31] = 1;
 			}
-			distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
+			try {
+				distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
+			} catch (DataFormatException e) {
+				destroyAndThrow(e);
+				throw new AssertionError("Unreachable");
+			}
 		}
 	}
 	
@@ -452,10 +467,6 @@ public final class InflaterInputStream extends FilterInputStream {
 	/* 
 	 * Converts the given array of symbol code lengths into a canonical code tree.
 	 * A symbol code length is either zero (absent from the tree) or a positive integer.
-	 * 
-	 * This is almost a pure method (taking an array and returning a newly computed one),
-	 * except that if the given array produces an invalid full Huffman code tree then
-	 * this method destroys this decompressor's state so that no further reading can happen.
 	 * 
 	 * A code tree is an array of integers, where each pair represents a node.
 	 * Each pair is adjacent and starts on an even index. The first element of
@@ -477,7 +488,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	 * because the root is located at index 0 and the other internal node is
 	 * located at index 2.
 	 */
-	private short[] codeLengthsToCodeTree(byte[] codeLengths) throws IOException {
+	private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
 		// Allocate array for the worst case if all symbols are present
 		short[] result = new short[(codeLengths.length - 1) * 2];
 		Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
@@ -510,7 +521,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				while (resultIndex < allocated && result[resultIndex] != CODE_TREE_OPEN_SLOT)
 					resultIndex++;
 				if (resultIndex == allocated)  // No more slots left
-					destroyAndThrow(new DataFormatException("Canonical code fails to produce full Huffman code tree"));
+					throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
 				
 				// Put the symbol into the slot and increment
 				result[resultIndex] = (short)~symbol;
@@ -534,7 +545,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Check for unused open slots after all symbols are allocated
 		for (int i = 0; i < allocated; i++) {
 			if (result[i] == CODE_TREE_OPEN_SLOT)
-				destroyAndThrow(new DataFormatException("Canonical code fails to produce full Huffman code tree"));
+				throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
 		}
 		return result;
 	}
@@ -761,21 +772,19 @@ public final class InflaterInputStream extends FilterInputStream {
 	private static final short[] FIXED_DISTANCE_CODE_TREE;
 	
 	static {
+		byte[] llcodelens = new byte[288];
+		Arrays.fill(llcodelens,   0, 144, (byte)8);
+		Arrays.fill(llcodelens, 144, 256, (byte)9);
+		Arrays.fill(llcodelens, 256, 280, (byte)7);
+		Arrays.fill(llcodelens, 280, 288, (byte)8);
+		
+		byte[] distcodelens = new byte[32];
+		Arrays.fill(distcodelens, (byte)5);
+		
 		try {
-			byte[] llcodelens = new byte[288];
-			Arrays.fill(llcodelens,   0, 144, (byte)8);
-			Arrays.fill(llcodelens, 144, 256, (byte)9);
-			Arrays.fill(llcodelens, 256, 280, (byte)7);
-			Arrays.fill(llcodelens, 280, 288, (byte)8);
-			
-			byte[] distcodelens = new byte[32];
-			Arrays.fill(distcodelens, (byte)5);
-			
-			InflaterInputStream dummy = new InflaterInputStream(
-				new ByteArrayInputStream(new byte[0]), false);
-			FIXED_LITERAL_LENGTH_CODE_TREE = dummy.codeLengthsToCodeTree(llcodelens);
-			FIXED_DISTANCE_CODE_TREE = dummy.codeLengthsToCodeTree(distcodelens);
-		} catch (IOException e) {
+			FIXED_LITERAL_LENGTH_CODE_TREE = codeLengthsToCodeTree(llcodelens);
+			FIXED_DISTANCE_CODE_TREE = codeLengthsToCodeTree(distcodelens);
+		} catch (DataFormatException e) {
 			throw new AssertionError(e);
 		}
 	}
