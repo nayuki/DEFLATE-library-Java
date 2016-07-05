@@ -66,7 +66,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testReservedBlockType() throws IOException {
 		// Reserved block type
 		test("1 11 00000", "");
@@ -116,7 +116,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testUncompressedMismatchedLength() throws IOException {
 		// Uncompressed block (mismatched len and nlen)
 		test("1 00 00000 0010000000010000 1111100100110101", "");
@@ -181,28 +181,28 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testFixedHuffmanInvalidLengthCode286() throws IOException {
 		// Fixed Huffman block: #286
 		test("1 10 11000110", "");
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testFixedHuffmanInvalidLengthCode287() throws IOException {
 		// Fixed Huffman block: #287
 		test("1 10 11000111", "");
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testFixedHuffmanInvalidDistanceCode30() throws IOException {
 		// Fixed Huffman block: 00 #257 #30
 		test("1 10 00110000 0000001 11110", "");
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testFixedHuffmanInvalidDistanceCode31() throws IOException {
 		// Fixed Huffman block: 00 #257 #31
 		test("1 10 00110000 0000001 11111", "");
@@ -266,7 +266,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanCodeLengthRepeatAtStart() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=18
@@ -280,7 +280,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanTooManyCodeLengthItems() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=18
@@ -294,7 +294,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanOverfullCode0() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
@@ -307,7 +307,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanOverfullCode1() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
@@ -320,7 +320,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanUnpairedCode() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
@@ -333,7 +333,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanEmptyCode() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
@@ -346,7 +346,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanUnderfullCode0() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
@@ -359,7 +359,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanUnderfullCode1() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
@@ -372,7 +372,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=IOException.class)
+	@Test(expected=DataFormatException.class)
 	public void testDynamicHuffmanUseOfNullDistanceCode() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=258, numDist=1, numCodeLen=18

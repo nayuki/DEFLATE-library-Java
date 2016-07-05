@@ -233,7 +233,7 @@ public final class InflaterInputStream extends FilterInputStream {
 					alignInputToByte();
 					state = readBits(16);  // Block length
 					if (state != (readBits(16) ^ 0xFFFF))
-						invalidData("len/nlen mismatch in uncompressed block");
+						destroyAndThrow(new DataFormatException("len/nlen mismatch in uncompressed block"));
 					break;
 				case 1:
 					state = -1;
@@ -245,7 +245,7 @@ public final class InflaterInputStream extends FilterInputStream {
 					decodeHuffmanCodes();
 					break;
 				case 3:
-					invalidData("Reserved block type");
+					destroyAndThrow(new DataFormatException("Reserved block type"));
 					break;
 				default:
 					throw new AssertionError();
@@ -279,7 +279,7 @@ public final class InflaterInputStream extends FilterInputStream {
 					int run = decodeRunLength(sym);
 					assert 3 <= run && run <= 258;
 					if (distanceCodeTree == null)
-						invalidData("Length symbol encountered with empty distance code");
+						destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
 					int distSym = decodeSymbol(distanceCodeTree);
 					assert 0 <= distSym && distSym <= 31;
 					int dist = decodeDistance(distSym);
@@ -405,7 +405,7 @@ public final class InflaterInputStream extends FilterInputStream {
 					i++;
 				} else if (sym == 16) {
 					if (runVal == -1)
-						invalidData("No code length value to copy");
+						destroyAndThrow(new DataFormatException("No code length value to copy"));
 					runLen = readBits(2) + 3;
 				} else if (sym == 17) {
 					runVal = 0;
@@ -417,7 +417,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			}
 		}
 		if (runLen > 0)
-			invalidData("Run exceeds number of codes");
+			destroyAndThrow(new DataFormatException("Run exceeds number of codes"));
 		
 		// Create literal-length code tree
 		byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
@@ -510,7 +510,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				while (resultIndex < allocated && result[resultIndex] != CODE_TREE_OPEN_SLOT)
 					resultIndex++;
 				if (resultIndex == allocated)  // No more slots left
-					invalidData("Canonical code fails to produce full Huffman code tree");
+					destroyAndThrow(new DataFormatException("Canonical code fails to produce full Huffman code tree"));
 				
 				// Put the symbol into the slot and increment
 				result[resultIndex] = (short)~symbol;
@@ -534,7 +534,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Check for unused open slots after all symbols are allocated
 		for (int i = 0; i < allocated; i++) {
 			if (result[i] == CODE_TREE_OPEN_SLOT)
-				invalidData("Canonical code fails to produce full Huffman code tree");
+				destroyAndThrow(new DataFormatException("Canonical code fails to produce full Huffman code tree"));
 		}
 		return result;
 	}
@@ -570,7 +570,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		} else if (sym == 285)
 			return 258;
 		else {  // sym is 286 or 287
-			invalidData("Reserved run length symbol: " + sym);
+			destroyAndThrow(new DataFormatException("Reserved run length symbol: " + sym));
 			throw new AssertionError("Unreachable");
 		}
 	}
@@ -587,7 +587,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			int numExtraBits = (sym >>> 1) - 1;
 			return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
 		} else {  // sym is 30 or 31
-			invalidData("Reserved distance symbol: " + sym);
+			destroyAndThrow(new DataFormatException("Reserved distance symbol: " + sym));
 			throw new AssertionError("Unreachable");
 		}
 	}
@@ -684,7 +684,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			assert inputBufferIndex == inputBufferLength;
 			int n = in.read(b, off, len);
 			if (n == -1)
-				invalidData("Unexpected end of stream");
+				destroyAndThrow(new DataFormatException("Unexpected end of stream"));
 			off += n;
 			len -= n;
 		}
@@ -705,7 +705,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBufferLength = in.read(inputBuffer);
 		inputBufferIndex = 0;
 		if (inputBufferLength == -1)
-			invalidData("Unexpected end of stream");  // Note: This sets inputBufferLength to 0
+			destroyAndThrow(new DataFormatException("Unexpected end of stream"));  // Note: This sets inputBufferLength to 0
 		if (inputBufferLength < -1 || inputBufferLength > inputBuffer.length)
 			throw new AssertionError();
 	}
@@ -723,11 +723,11 @@ public final class InflaterInputStream extends FilterInputStream {
 	/*---- State management methods ----*/
 	
 	// Throws an IOException with the given reason, and destroys the state of this decompressor.
-	private void invalidData(String reason) throws IOException {
+	private void destroyAndThrow(IOException e) throws IOException {
 		state = -2;
 		destroyState();
 		// Do not set 'in' to null, so that calling close() is still possible
-		throw new IOException("Invalid DEFLATE data: " + reason);
+		throw e;
 	}
 	
 	
