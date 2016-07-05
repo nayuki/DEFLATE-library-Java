@@ -62,11 +62,14 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	// The state of the decompressor:
 	//   -3: This decompressor stream has been closed. Equivalent to in == null.
-	//   -2: A data format exception has been thrown.
+	//   -2: A data format exception has been thrown. Equivalent to exception != null.
 	//   -1: Currently processing a Huffman-compressed block.
 	//    0: Initial state, or a block just ended.
 	//   1 to 65535: Currently processing an uncompressed block, number of bytes remaining.
 	private int state;
+	
+	// A saved exception that is thrown on every read() or detach().
+	private IOException exception;
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	// This starts as false, should eventually become true, and never changes back to false.
@@ -135,6 +138,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		
 		// Initialize state
 		state = 0;
+		exception = null;
 		isLastBlock = false;
 		literalLengthCodeTree = null;
 		distanceCodeTree = null;
@@ -194,8 +198,8 @@ public final class InflaterInputStream extends FilterInputStream {
 			throw new ArrayIndexOutOfBoundsException();
 		if (in == null)
 			throw new IllegalStateException("Stream already closed");
-		if (state == -2)
-			throw new IOException("The stream contained invalid data");
+		if (exception != null)
+			throw exception;
 		
 		// Special handling for empty read request
 		if (len == 0)
@@ -332,8 +336,8 @@ public final class InflaterInputStream extends FilterInputStream {
 			throw new IllegalStateException("Detachability not specified at construction");
 		if (in == null)
 			throw new IllegalStateException("Input stream already detached/closed");
-		if (state == -2)
-			throw new IllegalStateException("Cannot detach from a stream with errors");
+		if (exception != null)
+			throw exception;
 		
 		// Rewind the underlying stream, then skip over bytes that were already consumed.
 		// Note that a byte with some bits consumed is considered to be fully consumed.
@@ -365,6 +369,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		super.close();
 		in = null;
 		state = -3;
+		exception = null;
 		destroyState();
 	}
 	
@@ -736,13 +741,14 @@ public final class InflaterInputStream extends FilterInputStream {
 	// Throws an IOException with the given reason, and destroys the state of this decompressor.
 	private void destroyAndThrow(IOException e) throws IOException {
 		state = -2;
+		exception = e;
 		destroyState();
 		// Do not set 'in' to null, so that calling close() is still possible
 		throw e;
 	}
 	
 	
-	// Clears all state variables except 'in' and 'state', to prevent accidental use of the
+	// Clears all state variables except {in, state, exception}, to prevent accidental use of the
 	// stream thereafter. It is illegal to call read() or detach() after this method is called.
 	// The caller is responsible for manipulating the other state variables appropriately.
 	private void destroyState() {
