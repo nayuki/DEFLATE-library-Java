@@ -276,6 +276,17 @@ public final class InflaterInputStream extends FilterInputStream {
 			
 		} else if (state == -1) {
 			// Decode symbols from Huffman-coded block
+			return result + readInsideHuffmanBlock(b, off + result, len - result);
+		} else
+			throw new AssertionError();
+	}
+	
+	
+	// This method exists to split up the public read(byte[],int,int) method that is rather long.
+	// For internal use only; must only be called by read(byte[],int,int). The input array's subrange must be valid
+	// (the caller checks the preconditions). The current state must be -1. This returns a number in the range [0, len].
+	private int readInsideHuffmanBlock(byte[] b, int off, int len) throws IOException {
+			int result = 0;
 			while (result < len) {
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 				if (inputBitBufferLength < 48) {
@@ -467,9 +478,6 @@ public final class InflaterInputStream extends FilterInputStream {
 				}
 			}
 			return result;
-			
-		} else
-			throw new AssertionError();
 	}
 	
 	
