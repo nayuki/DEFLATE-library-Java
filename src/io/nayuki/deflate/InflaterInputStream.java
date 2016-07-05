@@ -812,38 +812,16 @@ public final class InflaterInputStream extends FilterInputStream {
 		assert inputBitBuffer >>> inputBitBufferLength == 0;  // Ensure high-order bits are clean
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
-		byte[] b = inputBuffer;  // Shorter name
 		while (inputBitBufferLength < numBits) {
-			int i = inputBufferIndex;  // Shorter name
+			while (inputBufferIndex >= inputBufferLength)  // Fill and retry
+				fillInputBuffer();
 			
 			// Pack as many bytes as possible from input byte buffer into the bit buffer
-			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBufferLength - i);
-			long temp;  // Bytes packed in little endian
-			if (numBytes == 8) {
-				temp =     (((b[i]&0xFF) | (b[i+1]&0xFF)<<8 | (b[i+2]&0xFF)<<16 | b[i+3]<<24) & 0xFFFFFFFFL) |
-				    (long)((b[i+4]&0xFF) | (b[i+5]&0xFF)<<8 | (b[i+6]&0xFF)<<16 | b[i+7]<<24) << 32;
-			} else if (numBytes == 7) {
-				temp =     (((b[i]&0xFF) | (b[i+1]&0xFF)<<8 | (b[i+2]&0xFF)<<16 | b[i+3]<<24) & 0xFFFFFFFFL) |
-				    (long)((b[i+4]&0xFF) | (b[i+5]&0xFF)<<8 | (b[i+6]&0xFF)<<16) << 32;
-			} else if (numBytes == 6) {
-				temp =     (((b[i]&0xFF) | (b[i+1]&0xFF)<<8 | (b[i+2]&0xFF)<<16 | b[i+3]<<24) & 0xFFFFFFFFL) |
-				    (long)((b[i+4]&0xFF) | (b[i+5]&0xFF)<<8) << 32;
-			} else if (numBytes > 0) {
-				// This slower general logic is valid for 0 <= numBytes <= 8
-				temp = 0;
-				for (int j = 0; j < numBytes; i++, j++)
-					temp |= (b[i] & 0xFFL) << (j << 3);
-			} else if (numBytes == 0) {
-				// Fill and retry
-				fillInputBuffer();
-				continue;
-			} else
-				throw new AssertionError("Unreachable state");
-			
-			// Update the buffer
-			inputBitBuffer |= temp << inputBitBufferLength;
-			inputBitBufferLength += numBytes << 3;
-			inputBufferIndex += numBytes;
+			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBufferLength - inputBufferIndex);
+			if (numBytes <= 0)
+				throw new AssertionError("Impossible state");
+			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8, inputBufferIndex++)
+				inputBitBuffer |= (inputBuffer[inputBufferIndex] & 0xFFL) << inputBitBufferLength;
 			assert inputBitBufferLength <= 64;  // Can temporarily be 64
 		}
 		
