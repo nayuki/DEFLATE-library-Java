@@ -1,3 +1,11 @@
+/* 
+ * Fast DEFLATE implementation
+ * 
+ * Copyright (c) Project Nayuki
+ * All rights reserved. Contact Nayuki for licensing.
+ * https://www.nayuki.io/page/fast-deflate-implementation
+ */
+
 package io.nayuki.deflate;
 
 import java.io.BufferedOutputStream;
