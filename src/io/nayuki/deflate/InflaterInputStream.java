@@ -76,8 +76,10 @@ public final class InflaterInputStream extends FilterInputStream {
 	private boolean isLastBlock;
 	
 	// Current code trees for when state == -1. When state != -1, both must be null.
-	private short[] literalLengthCodeTree;  // When state == -1, this must be not null
-	private short[] distanceCodeTree;  // When state == -1, this can be null or not null
+	private short[] literalLengthCodeTree;   // When state == -1, this must be not null
+	private short[] literalLengthCodeTable;  // Derived from literalLengthCodeTree; same nullness
+	private short[] distanceCodeTree;   // When state == -1, this can be null or not null
+	private short[] distanceCodeTable;  // Derived from distanceCodeTree; same nullness
 	
 	
 	
@@ -141,7 +143,9 @@ public final class InflaterInputStream extends FilterInputStream {
 		exception = null;
 		isLastBlock = false;
 		literalLengthCodeTree = null;
+		literalLengthCodeTable = null;
 		distanceCodeTree = null;
+		distanceCodeTable = null;
 	}
 	
 	
@@ -240,8 +244,10 @@ public final class InflaterInputStream extends FilterInputStream {
 					break;
 				case 1:
 					state = -1;
-					literalLengthCodeTree = FIXED_LITERAL_LENGTH_CODE_TREE;
-					distanceCodeTree = FIXED_DISTANCE_CODE_TREE;
+					literalLengthCodeTree  = FIXED_LITERAL_LENGTH_CODE_TREE;
+					literalLengthCodeTable = FIXED_LITERAL_LENGTH_CODE_TABLE;
+					distanceCodeTree  = FIXED_DISTANCE_CODE_TREE;
+					distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
 					break;
 				case 2:
 					state = -1;
@@ -306,7 +312,9 @@ public final class InflaterInputStream extends FilterInputStream {
 					}
 				} else {  // sym == 256, end of block
 					literalLengthCodeTree = null;
+					literalLengthCodeTable = null;
 					distanceCodeTree = null;
+					distanceCodeTable = null;
 					state = 0;
 					break;
 				}
@@ -378,8 +386,9 @@ public final class InflaterInputStream extends FilterInputStream {
 	
 	// Reads the current block's dynamic Huffman code tables from from the input buffers/stream,
 	// processes the code lengths and computes the code trees, and ultimately sets just the variables
-	// 'literalLengthCodeTree' and 'distanceCodeTree'. This might throw an IOException for actual
-	// I/O exceptions, unexpected end of stream, or a description of an invalid Huffman code.
+	// {literalLengthCodeTree, literalLengthCodeTable, distanceCodeTree, distanceCodeTable}.
+	// This might throw an IOException for actual I/O exceptions, unexpected end of stream,
+	// or a description of an invalid Huffman code.
 	private void decodeHuffmanCodes() throws IOException {
 		int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
 		int numDistCodes    = readBits(5) +   1;  // hdist +   1
@@ -437,6 +446,7 @@ public final class InflaterInputStream extends FilterInputStream {
 			destroyAndThrow(e);
 			throw new AssertionError("Unreachable");
 		}
+		literalLengthCodeTable = codeTreeToCodeTable(literalLengthCodeTree);
 		
 		// Create distance code tree with some extra processing
 		byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
@@ -465,6 +475,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				destroyAndThrow(e);
 				throw new AssertionError("Unreachable");
 			}
+			distanceCodeTable = codeTreeToCodeTable(distanceCodeTree);
 		}
 	}
 	
@@ -551,6 +562,40 @@ public final class InflaterInputStream extends FilterInputStream {
 		for (int i = 0; i < allocated; i++) {
 			if (result[i] == CODE_TREE_OPEN_SLOT)
 				throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
+		}
+		return result;
+	}
+	
+	
+	/* 
+	 * Converts a code tree array into a fast look-up table that consumes up to
+	 * CODE_TABLE_BITS at once. Each entry i in the table encodes the result of
+	 * decoding starting from the root and consuming the bits of i starting from
+	 * the lowest-order bits.
+	 * 
+	 * Each array element encodes (numBitsConsumed << 11) | (node & 0x7FF), where:
+	 * - numBitsConsumed is a 4-bit unsigned integer in the range [1, CODE_TABLE_BITS].
+	 * - node is an 11-bit signed integer representing either the current node
+	 *   (which is a non-negative number) after consuming all the available bits
+	 *   from i, or the bitwise complement of the decoded symbol (so it's negative).
+	 * Note that each element is a non-negative number.
+	 */
+	private static short[] codeTreeToCodeTable(short[] codeTree) {
+		assert 1 <= CODE_TABLE_BITS && CODE_TABLE_BITS <= 15;
+		short[] result = new short[1 << CODE_TABLE_BITS];
+		for (int i = 0; i < result.length; i++) {
+			// Simulate decodeSymbol() using the bits of i
+			int node = 0;
+			int consumed = 0;
+			do {
+				node = codeTree[node + ((i >>> consumed) & 1)];
+				consumed++;
+			} while (node >= 0 && consumed < CODE_TABLE_BITS);
+			
+			assert 1 <= consumed && consumed <= 15;  // 4 bits unsigned
+			assert -1024 <= node && node <= 1023;  // 11 bits signed
+			result[i] = (short)(consumed << 11 | (node & 0x7FF));
+			assert result[i] >= 0;
 		}
 		return result;
 	}
@@ -754,7 +799,9 @@ public final class InflaterInputStream extends FilterInputStream {
 	private void destroyState() {
 		isLastBlock = true;
 		literalLengthCodeTree = null;
+		literalLengthCodeTable = null;
 		distanceCodeTree = null;
+		distanceCodeTable = null;
 		
 		inputBuffer = null;
 		inputBufferLength = 0;
@@ -775,7 +822,9 @@ public final class InflaterInputStream extends FilterInputStream {
 		{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 	
 	private static final short[] FIXED_LITERAL_LENGTH_CODE_TREE;
+	private static final short[] FIXED_LITERAL_LENGTH_CODE_TABLE;
 	private static final short[] FIXED_DISTANCE_CODE_TREE;
+	private static final short[] FIXED_DISTANCE_CODE_TABLE;
 	
 	static {
 		byte[] llcodelens = new byte[288];
@@ -793,6 +842,8 @@ public final class InflaterInputStream extends FilterInputStream {
 		} catch (DataFormatException e) {
 			throw new AssertionError(e);
 		}
+		FIXED_LITERAL_LENGTH_CODE_TABLE = codeTreeToCodeTable(FIXED_LITERAL_LENGTH_CODE_TREE);
+		FIXED_DISTANCE_CODE_TABLE = codeTreeToCodeTable(FIXED_DISTANCE_CODE_TREE);
 	}
 	
 	
@@ -808,5 +859,10 @@ public final class InflaterInputStream extends FilterInputStream {
 	// For use in codeLengthsToCodeTree() only.
 	private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
 	private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
+	
+	
+	// Any integer from 1 to 15 is valid. Affects speed but produces same output.
+	private static final int CODE_TABLE_BITS = 9;
+	private static final int CODE_TABLE_MASK = (1 << CODE_TABLE_BITS) - 1;
 	
 }
