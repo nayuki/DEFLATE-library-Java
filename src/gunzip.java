@@ -23,7 +23,7 @@ import io.nayuki.deflate.MarkableFileInputStream;
 
 /**
  * Decompression application for the gzip file format.
- * <p>Usage: java gunzip InputFile OutputFile</p>
+ * <p>Usage: java gunzip InputFile.gz OutputFile</p>
  * <p>This decompresses a single gzip file into a single output file. The program also prints
  * some information to standard output, and error messages if the file is invalid/corrupt.</p>
  */
