@@ -13,6 +13,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Objects;
 
 
 /**
@@ -196,8 +197,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	 */
 	public int read(byte[] b, int off, int len) throws IOException {
 		// Check arguments and state
-		if (b == null)
-			throw new NullPointerException();
+		Objects.requireNonNull(b);
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
 			throw new ArrayIndexOutOfBoundsException();
 		if (in == null)
