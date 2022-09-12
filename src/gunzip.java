@@ -75,11 +75,11 @@ public final class gunzip {
 					System.err.println("Last modified: N/A");
 				
 				// Extra flags
-				switch (b[8] & 0xFF) {
-					case 2:   System.err.println("Extra flags: Maximum compression");  break;
-					case 4:   System.err.println("Extra flags: Fastest compression");  break;
-					default:  System.err.println("Extra flags: Unknown (" + (b[8] & 0xFF) + ")");  break;
-				}
+				System.err.println("Extra flags: " + switch (b[8] & 0xFF) {
+					case 2 -> "Maximum compression";
+					case 4 -> "Fastest compression";
+					default -> "Unknown (" + (b[8] & 0xFF) + ")";
+				});
 				
 				// Operating system
 				String os = switch (b[9] & 0xFF) {
