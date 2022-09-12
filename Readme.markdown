@@ -10,7 +10,7 @@ Home page with detailed description: [https://www.nayuki.io/page/deflate-library
 License
 -------
 
-Copyright © 2016 Project Nayuki. (MIT License)
+Copyright © 2022 Project Nayuki. (MIT License)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
