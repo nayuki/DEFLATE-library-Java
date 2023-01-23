@@ -228,56 +228,54 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Now the output buffer is clear, and we have room to read at least one byte
 		assert outputBufferLength == 0 && outputBufferIndex == 0 && result < len;
 		
-		// Get into a block if not already inside one
-		while (state == 0) {
-			if (isLastBlock)
-				return -1;
-			
-			// Read and process the block header
-			isLastBlock = readBits(1) == 1;
-			switch (readBits(2)) {  // Type
-				case 0:
-					alignInputToByte();
-					state = readBits(16);  // Block length
-					if (state != (readBits(16) ^ 0xFFFF))
-						destroyAndThrow(new DataFormatException("len/nlen mismatch in uncompressed block"));
+		while (result < len) {
+			if (state == 0) {
+				if (isLastBlock)
 					break;
-				case 1:
-					state = -1;
-					literalLengthCodeTree  = FIXED_LITERAL_LENGTH_CODE_TREE;
-					literalLengthCodeTable = FIXED_LITERAL_LENGTH_CODE_TABLE;
-					distanceCodeTree  = FIXED_DISTANCE_CODE_TREE;
-					distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
-					break;
-				case 2:
-					state = -1;
-					decodeHuffmanCodes();
-					break;
-				case 3:
-					destroyAndThrow(new DataFormatException("Reserved block type"));
-					break;
-				default:
-					throw new AssertionError();
-			}
+				// Read and process the block header
+				isLastBlock = readBits(1) == 1;
+				switch (readBits(2)) {  // Type
+					case 0:
+						alignInputToByte();
+						state = readBits(16);  // Block length
+						if (state != (readBits(16) ^ 0xFFFF))
+							destroyAndThrow(new DataFormatException("len/nlen mismatch in uncompressed block"));
+						break;
+					case 1:
+						state = -1;
+						literalLengthCodeTree  = FIXED_LITERAL_LENGTH_CODE_TREE;
+						literalLengthCodeTable = FIXED_LITERAL_LENGTH_CODE_TABLE;
+						distanceCodeTree  = FIXED_DISTANCE_CODE_TREE;
+						distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
+						break;
+					case 2:
+						state = -1;
+						decodeHuffmanCodes();
+						break;
+					case 3:
+						destroyAndThrow(new DataFormatException("Reserved block type"));
+						break;
+					default:
+						throw new AssertionError();
+				}
+				
+			} else if (1 <= state && state <= 0xFFFF) {
+				// Read bytes from uncompressed block
+				int toRead = Math.min(state, len - result);
+				readBytes(b, off + result, toRead);
+				for (int i = 0; i < toRead; i++) {
+					dictionary[dictionaryIndex] = b[off + result];
+					dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+					result++;
+				}
+				state -= toRead;
+			} else if (state == -1)  // Decode symbols from Huffman-coded block
+				result += readInsideHuffmanBlock(b, off + result, len - result);
+			else
+				throw new AssertionError("Impossible state");
 		}
 		
-		// Read the current block's data into the argument array
-		if (1 <= state && state <= 0xFFFF) {
-			// Read bytes from uncompressed block
-			int toRead = Math.min(state, len - result);
-			readBytes(b, off + result, toRead);
-			for (int i = 0; i < toRead; i++) {
-				dictionary[dictionaryIndex] = b[off + result];
-				dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-				result++;
-			}
-			state -= toRead;
-			return result;
-			
-		} else if (state == -1)  // Decode symbols from Huffman-coded block
-			return result + readInsideHuffmanBlock(b, off + result, len - result);
-		else
-			throw new AssertionError("Impossible state");
+		return result > 0 ? result : -1;
 	}
 	
 	
