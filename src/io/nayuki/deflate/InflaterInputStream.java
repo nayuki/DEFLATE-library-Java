@@ -27,9 +27,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	/* Data buffers */
 	
 	// Buffer of bytes read from in.read() (the underlying input stream)
-	private byte[] inputBuffer;     // Can have any positive length (but longer means less overhead)
-	private int inputBufferLength;  // Number of valid prefix bytes, at least 0
-	private int inputBufferIndex;   // Index of next byte to consume
+	private ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
 	
 	// Buffer of bits packed from the bytes in 'inputBuffer'
 	private long inputBitBuffer;       // 0 <= value < 2^inputBitBufferLength
@@ -127,9 +125,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		}
 		
 		// Initialize data buffers
-		inputBuffer = new byte[inBufLen];
-		inputBufferLength = 0;
-		inputBufferIndex = 0;
+		inputBuffer = ByteBuffer.allocate(inBufLen).position(0).limit(0);
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
 		outputBuffer = ByteBuffer.allocate(257).position(0).limit(0);
@@ -265,25 +261,21 @@ public final class InflaterInputStream extends FilterInputStream {
 		while (result < len) {
 			// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 			if (inputBitBufferLength < 48) {
-				byte[] c = inputBuffer;  // Shorter name
-				int i = inputBufferIndex;  // Shorter name
-				int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBufferLength - i);
+				ByteBuffer c = inputBuffer;  // Shorter name
+				int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
 				assert 0 <= numBytes && numBytes <= 8;
 				if (numBytes == 2) {  // Only implement special cases that occur frequently in practice
-					inputBitBuffer |= (long)((c[i]&0xFF) | (c[i+1]&0xFF)<<8) << inputBitBufferLength;
+					inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBufferLength;
 					inputBitBufferLength += 2 * 8;
-					inputBufferIndex += 2;
 				} else if (numBytes == 3) {
-					inputBitBuffer |= (long)((c[i]&0xFF) | (c[i+1]&0xFF)<<8 | (c[i+2]&0xFF)<<16) << inputBitBufferLength;
+					inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBufferLength;
 					inputBitBufferLength += 3 * 8;
-					inputBufferIndex += 3;
 				} else if (numBytes == 4) {
-					inputBitBuffer |= (((c[i]&0xFF) | (c[i+1]&0xFF)<<8 | (c[i+2]&0xFF)<<16 | c[i+3]<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
+					inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
 					inputBitBufferLength += 4 * 8;
-					inputBufferIndex += 4;
 				} else {  // This slower general logic is valid for 0 <= numBytes <= 8
-					for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8, inputBufferIndex++)
-						inputBitBuffer |= (c[inputBufferIndex] & 0xFFL) << inputBitBufferLength;
+					for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
+						inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
 				}
 			}
 			
@@ -471,7 +463,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Rewind the underlying stream, then skip over bytes that were already consumed.
 		// Note that a byte with some bits consumed is considered to be fully consumed.
 		in.reset();
-		int skip = inputBufferIndex - inputBitBufferLength / 8;
+		int skip = inputBuffer.position() - inputBitBufferLength / 8;
 		assert skip >= 0;
 		while (skip > 0) {
 			long n = in.skip(skip);
@@ -787,15 +779,15 @@ public final class InflaterInputStream extends FilterInputStream {
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
 		while (inputBitBufferLength < numBits) {
-			while (inputBufferIndex >= inputBufferLength)  // Fill and retry
+			while (!inputBuffer.hasRemaining())  // Fill and retry
 				fillInputBuffer();
 			
 			// Pack as many bytes as possible from input byte buffer into the bit buffer
-			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBufferLength - inputBufferIndex);
+			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
 			if (numBytes <= 0)
 				throw new AssertionError("Impossible state");
-			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8, inputBufferIndex++)
-				inputBitBuffer |= (inputBuffer[inputBufferIndex] & 0xFFL) << inputBitBufferLength;
+			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8)
+				inputBitBuffer |= (inputBuffer.get() & 0xFFL) << inputBitBufferLength;
 			assert inputBitBufferLength <= 64;  // Can temporarily be 64
 		}
 		
@@ -831,17 +823,16 @@ public final class InflaterInputStream extends FilterInputStream {
 		
 		// Read from input buffer
 		{
-			int n = Math.min(len, inputBufferLength - inputBufferIndex);
+			int n = Math.min(len, inputBuffer.remaining());
 			assert inputBitBufferLength == 0 || n == 0;
-			System.arraycopy(inputBuffer, inputBufferIndex, b, off, n);
-			inputBufferIndex += n;
+			inputBuffer.get(b, off, n);
 			off += n;
 			len -= n;
 		}
 		
 		// Read directly from input stream (without putting into input buffer)
 		while (len > 0) {
-			assert inputBufferIndex == inputBufferLength;
+			assert !inputBuffer.hasRemaining();
 			int n = in.read(b, off, len);
 			if (n == -1)
 				destroyAndThrow(new EOFException("Unexpected end of stream"));
@@ -857,17 +848,15 @@ public final class InflaterInputStream extends FilterInputStream {
 	private void fillInputBuffer() throws IOException {
 		if (state < -1)
 			throw new AssertionError("Must not read in this state");
-		if (inputBufferIndex < inputBufferLength)
+		if (inputBuffer.hasRemaining())
 			throw new AssertionError("Input buffer not fully consumed yet");
 		
 		if (isDetachable)
-			in.mark(inputBuffer.length);
-		inputBufferLength = in.read(inputBuffer);
-		inputBufferIndex = 0;
-		if (inputBufferLength == -1)
-			destroyAndThrow(new EOFException("Unexpected end of stream"));  // Note: This sets inputBufferLength to 0
-		if (inputBufferLength < -1 || inputBufferLength > inputBuffer.length)
-			throw new AssertionError();
+			in.mark(inputBuffer.capacity());
+		int n = in.read(inputBuffer.array());
+		if (n == -1)
+			destroyAndThrow(new EOFException("Unexpected end of stream"));
+		inputBuffer.position(0).limit(n);
 	}
 	
 	
@@ -903,8 +892,6 @@ public final class InflaterInputStream extends FilterInputStream {
 		distanceCodeTable = null;
 		
 		inputBuffer = null;
-		inputBufferLength = 0;
-		inputBufferIndex = 0;
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
 		outputBuffer = null;
