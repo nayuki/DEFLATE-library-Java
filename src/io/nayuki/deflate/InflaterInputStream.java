@@ -12,6 +12,7 @@ import java.io.EOFException;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -35,9 +36,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	private int inputBitBufferLength;  // Always in the range [0, 63]
 	
 	// Queued bytes to yield first when this.read() is called
-	private byte[] outputBuffer;     // Should have length 257 (but pointless if longer)
-	private int outputBufferLength;  // Number of valid prefix bytes, at least 0
-	private int outputBufferIndex;   // Index of next byte to produce, in the range [0, outputBufferLength]
+	private ByteBuffer outputBuffer;  // Should have length 257 (but pointless if longer)
 	
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
 	private byte[] dictionary;
@@ -133,9 +132,7 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBufferIndex = 0;
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
-		outputBuffer = new byte[257];
-		outputBufferLength = 0;
-		outputBufferIndex = 0;
+		outputBuffer = ByteBuffer.allocate(257).position(0).limit(0);
 		dictionary = new byte[DICTIONARY_LENGTH];
 		dictionaryIndex = 0;
 		
@@ -201,18 +198,14 @@ public final class InflaterInputStream extends FilterInputStream {
 		int result = 0;  // Number of bytes filled in the array 'b'
 		
 		// First move bytes (if any) from the output buffer
-		if (outputBufferLength > 0) {
-			int n = Math.min(outputBufferLength - outputBufferIndex, len);
-			System.arraycopy(outputBuffer, outputBufferIndex, b, off, n);
+		if (outputBuffer.hasRemaining()) {
+			int n = Math.min(outputBuffer.remaining(), len);
+			outputBuffer.get(b, off, n);
 			result = n;
-			outputBufferIndex += n;
-			if (outputBufferIndex == outputBufferLength) {
-				outputBufferLength = 0;
-				outputBufferIndex = 0;
-			}
 		}
 		
 		while (result < len) {
+			assert !outputBuffer.hasRemaining();
 			if (state == 0) {
 				if (isLastBlock)
 					break;
@@ -259,7 +252,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				throw new AssertionError("Impossible state");
 		}
 		
-		return result > 0 || outputBufferLength > 0 || state != 0 || !isLastBlock ? result : -1;
+		return result > 0 || outputBuffer.hasRemaining() || state != 0 || !isLastBlock ? result : -1;
 	}
 	
 	
@@ -268,6 +261,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	// (the caller checks the preconditions). The current state must be -1. This returns a number in the range [0, len].
 	private int readInsideHuffmanBlock(byte[] b, int off, int len) throws IOException {
 		int result = 0;
+		outputBuffer.clear();
 		while (result < len) {
 			// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 			if (inputBitBufferLength < 48) {
@@ -393,11 +387,8 @@ public final class InflaterInputStream extends FilterInputStream {
 							if (result < len) {
 								b[off + result] = bb;
 								result++;
-							} else {
-								assert outputBufferLength < outputBuffer.length;
-								outputBuffer[outputBufferLength] = bb;
-								outputBufferLength++;
-							}
+							} else
+								outputBuffer.put(bb);
 						}
 					}
 					
@@ -438,11 +429,8 @@ public final class InflaterInputStream extends FilterInputStream {
 						if (result < len) {
 							b[off + result] = bb;
 							result++;
-						} else {
-							assert outputBufferLength < outputBuffer.length;
-							outputBuffer[outputBufferLength] = bb;
-							outputBufferLength++;
-						}
+						} else
+							outputBuffer.put(bb);
 					}
 				} else {  // sym == 256, end of block
 					literalLengthCodeTree = null;
@@ -454,6 +442,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				}
 			}
 		}
+		outputBuffer.flip();
 		return result;
 	}
 	
@@ -919,8 +908,6 @@ public final class InflaterInputStream extends FilterInputStream {
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
 		outputBuffer = null;
-		outputBufferLength = 0;
-		outputBufferIndex = 0;
 		dictionary = null;
 		dictionaryIndex = 0;
 	}
