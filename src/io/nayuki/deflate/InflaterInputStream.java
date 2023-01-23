@@ -170,14 +170,11 @@ public final class InflaterInputStream extends FilterInputStream {
 		// Therefore speeding up this method would result in needless complexity. Instead,
 		// we chose to optimize this method for simplicity and ease of verifying correctness.
 		byte[] b = new byte[1];
-		switch (read(b)) {
-			case 1:
-				return (b[0] & 0xFF);
-			case -1:
-				return -1;
-			default:
-				throw new AssertionError();
-		}
+		return switch (read(b)) {
+			case  1 -> b[0] & 0xFF;
+			case -1 -> -1;  // EOF
+			default -> throw new AssertionError("Unreachable logic");
+		};
 	}
 	
 	
