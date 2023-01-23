@@ -222,11 +222,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				outputBufferLength = 0;
 				outputBufferIndex = 0;
 			}
-			if (result == len)
-				return result;
 		}
-		// Now the output buffer is clear, and we have room to read at least one byte
-		assert outputBufferLength == 0 && outputBufferIndex == 0 && result < len;
 		
 		while (result < len) {
 			if (state == 0) {
