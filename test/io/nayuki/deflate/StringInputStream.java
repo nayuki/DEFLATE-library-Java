@@ -1,9 +1,9 @@
 /* 
  * DEFLATE library (Java)
- * Copyright (c) Project Nayuki
  * 
+ * Copyright (c) Project Nayuki
+ * MIT License. See readme file.
  * https://www.nayuki.io/page/deflate-library-java
- * https://github.com/nayuki/DEFLATE-library-Java
  */
 
 package io.nayuki.deflate;
