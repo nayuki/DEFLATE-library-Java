@@ -205,11 +205,6 @@ public final class InflaterInputStream extends FilterInputStream {
 		if (exception != null)
 			throw exception;
 		
-		// Special handling for empty read request
-		if (len == 0)
-			return (outputBufferLength > 0 || state != 0 || !isLastBlock) ? 0 : -1;
-		assert len > 0;
-		
 		int result = 0;  // Number of bytes filled in the array 'b'
 		
 		// First move bytes (if any) from the output buffer
@@ -271,7 +266,7 @@ public final class InflaterInputStream extends FilterInputStream {
 				throw new AssertionError("Impossible state");
 		}
 		
-		return result > 0 ? result : -1;
+		return result > 0 || outputBufferLength > 0 || state != 0 || !isLastBlock ? result : -1;
 	}
 	
 	
