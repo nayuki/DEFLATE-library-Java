@@ -105,8 +105,15 @@ public final class InflaterInputStream extends InputStream {
 			throw new ArrayIndexOutOfBoundsException();
 		if (state instanceof Closed)
 			throw new IllegalStateException("Stream already closed");
-		else if (state instanceof Open st)
-			return st.read(b, off, len);
+		else if (state instanceof Open st) {
+			try {
+				return st.read(b, off, len);
+			} catch (IOException e) {
+				state = new StickyException(st.input, e);
+				throw e;
+			}
+		} else if (state instanceof StickyException st)
+			throw st.exception;
 		else
 			throw new AssertionError("Unreachable");
 	}
@@ -131,7 +138,9 @@ public final class InflaterInputStream extends InputStream {
 		else if (state instanceof Open st) {
 			st.detach();
 			state = Closed.SINGLETON;
-		} else
+		} else if (state instanceof StickyException st)
+			throw st.exception;
+		else
 			throw new AssertionError("Unreachable");
 	}
 	
@@ -159,7 +168,7 @@ public final class InflaterInputStream extends InputStream {
 	private static class Open implements State {
 		
 		// The underlying stream to read from
-		private InputStream input;
+		public final InputStream input;
 		
 		// Indicates whether mark() should be called when the underlying
 		// input stream is read, and whether calling detach() is allowed.
@@ -201,9 +210,6 @@ public final class InflaterInputStream extends InputStream {
 		//   1 to 65535: Currently processing an uncompressed block, number of bytes remaining.
 		private int state;
 		
-		// A saved exception that is thrown on every read() or detach().
-		private IOException exception;
-		
 		// Indicates whether a block header with the "bfinal" flag has been seen.
 		// This starts as false, should eventually become true, and never changes back to false.
 		private boolean isLastBlock;
@@ -238,7 +244,6 @@ public final class InflaterInputStream extends InputStream {
 			
 			// Initialize state
 			state = 0;
-			exception = null;
 			isLastBlock = false;
 			literalLengthCodeTree = null;
 			literalLengthCodeTable = null;
@@ -248,9 +253,6 @@ public final class InflaterInputStream extends InputStream {
 		
 		
 		public int read(byte[] b, int off, int len) throws IOException {
-			if (exception != null)
-				throw exception;
-			
 			int result = 0;  // Number of bytes filled in the array 'b'
 			
 			// First move bytes (if any) from the output buffer
@@ -272,7 +274,7 @@ public final class InflaterInputStream extends InputStream {
 							alignInputToByte();
 							state = readBits(16);  // Block length
 							if (state != (readBits(16) ^ 0xFFFF))
-								destroyAndThrow(new DataFormatException("len/nlen mismatch in uncompressed block"));
+								throw new DataFormatException("len/nlen mismatch in uncompressed block");
 							break;
 						case 1:
 							state = -1;
@@ -286,8 +288,7 @@ public final class InflaterInputStream extends InputStream {
 							decodeHuffmanCodes();
 							break;
 						case 3:
-							destroyAndThrow(new DataFormatException("Reserved block type"));
-							break;
+							throw new DataFormatException("Reserved block type");
 						default:
 							throw new AssertionError();
 					}
@@ -372,7 +373,7 @@ public final class InflaterInputStream extends InputStream {
 						// Decode the run length (a customized version of decodeRunLength())
 						assert 257 <= sym && sym <= 287;
 						if (sym > 285)
-							destroyAndThrow(new DataFormatException("Reserved run length symbol: " + sym));
+							throw new DataFormatException("Reserved run length symbol: " + sym);
 						int run;
 						{
 							int temp = RUN_LENGTH_TABLE[sym - 257];
@@ -386,7 +387,7 @@ public final class InflaterInputStream extends InputStream {
 						
 						// Decode next distance symbol (a customized version of decodeSymbol())
 						if (distanceCodeTree == null)
-							destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
+							throw new DataFormatException("Length symbol encountered with empty distance code");
 						int distSym;
 						{
 							int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
@@ -406,7 +407,7 @@ public final class InflaterInputStream extends InputStream {
 						
 						// Decode the distance (a customized version of decodeDistance())
 						if (distSym > 29)
-							destroyAndThrow(new DataFormatException("Reserved distance symbol: " + distSym));
+							throw new DataFormatException("Reserved distance symbol: " + distSym);
 						int dist;
 						{
 							int temp = DISTANCE_TABLE[distSym];
@@ -465,7 +466,7 @@ public final class InflaterInputStream extends InputStream {
 						int run = decodeRunLength(sym);
 						assert 3 <= run && run <= 258;
 						if (distanceCodeTree == null)
-							destroyAndThrow(new DataFormatException("Length symbol encountered with empty distance code"));
+							throw new DataFormatException("Length symbol encountered with empty distance code");
 						int distSym = decodeSymbol(distanceCodeTree);
 						assert 0 <= distSym && distSym <= 31;
 						int dist = decodeDistance(distSym);
@@ -515,13 +516,7 @@ public final class InflaterInputStream extends InputStream {
 			byte[] codeLenCodeLen = new byte[19];  // This array is filled in a strange order
 			for (int i = 0; i < numCodeLenCodes; i++)
 				codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
-			short[] codeLenCodeTree;
-			try {
-				codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
-			} catch (DataFormatException e) {
-				destroyAndThrow(e);
-				throw new AssertionError("Unreachable");
-			}
+			short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
 			
 			// Read the main code lengths and handle runs
 			byte[] codeLens = new byte[numLitLenCodes + numDistCodes];
@@ -541,7 +536,7 @@ public final class InflaterInputStream extends InputStream {
 						i++;
 					} else if (sym == 16) {
 						if (runVal == -1)
-							destroyAndThrow(new DataFormatException("No code length value to copy"));
+							throw new DataFormatException("No code length value to copy");
 						runLen = readBits(2) + 3;
 					} else if (sym == 17) {
 						runVal = 0;
@@ -553,16 +548,11 @@ public final class InflaterInputStream extends InputStream {
 				}
 			}
 			if (runLen > 0)
-				destroyAndThrow(new DataFormatException("Run exceeds number of codes"));
+				throw new DataFormatException("Run exceeds number of codes");
 			
 			// Create literal-length code tree
 			byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
-			try {
-				literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
-			} catch (DataFormatException e) {
-				destroyAndThrow(e);
-				throw new AssertionError("Unreachable");
-			}
+			literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
 			literalLengthCodeTable = codeTreeToCodeTable(literalLengthCodeTree);
 			
 			// Create distance code tree with some extra processing
@@ -586,12 +576,7 @@ public final class InflaterInputStream extends InputStream {
 					distCodeLen = Arrays.copyOf(distCodeLen, 32);
 					distCodeLen[31] = 1;
 				}
-				try {
-					distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
-				} catch (DataFormatException e) {
-					destroyAndThrow(e);
-					throw new AssertionError("Unreachable");
-				}
+				distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
 				distanceCodeTable = codeTreeToCodeTable(distanceCodeTree);
 			}
 		}
@@ -748,8 +733,7 @@ public final class InflaterInputStream extends InputStream {
 			} else if (sym == 285)
 				return 258;
 			else {  // sym is 286 or 287
-				destroyAndThrow(new DataFormatException("Reserved run length symbol: " + sym));
-				throw new AssertionError("Unreachable");
+				throw new DataFormatException("Reserved run length symbol: " + sym);
 			}
 		}
 		
@@ -765,8 +749,7 @@ public final class InflaterInputStream extends InputStream {
 				int numExtraBits = (sym >>> 1) - 1;
 				return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
 			} else {  // sym is 30 or 31
-				destroyAndThrow(new DataFormatException("Reserved distance symbol: " + sym));
-				throw new AssertionError("Unreachable");
+				throw new DataFormatException("Reserved distance symbol: " + sym);
 			}
 		}
 		
@@ -839,7 +822,7 @@ public final class InflaterInputStream extends InputStream {
 				assert !inputBuffer.hasRemaining();
 				int n = input.read(b, off, len);
 				if (n == -1)
-					destroyAndThrow(new EOFException("Unexpected end of stream"));
+					throw new EOFException("Unexpected end of stream");
 				off += n;
 				len -= n;
 			}
@@ -859,7 +842,7 @@ public final class InflaterInputStream extends InputStream {
 				input.mark(inputBuffer.capacity());
 			int n = input.read(inputBuffer.array());
 			if (n == -1)
-				destroyAndThrow(new EOFException("Unexpected end of stream"));
+				throw new EOFException("Unexpected end of stream");
 			inputBuffer.position(0).limit(n);
 		}
 		
@@ -878,8 +861,6 @@ public final class InflaterInputStream extends InputStream {
 		public void detach() throws IOException {
 			if (!isDetachable)
 				throw new IllegalStateException("Detachability not specified at construction");
-			if (exception != null)
-				throw exception;
 			
 			// Rewind the underlying stream, then skip over bytes that were already consumed.
 			// Note that a byte with some bits consumed is considered to be fully consumed.
@@ -900,16 +881,6 @@ public final class InflaterInputStream extends InputStream {
 		
 		public void close() throws IOException {
 			input.close();
-		}
-		
-		
-		// Throws an IOException with the given reason, and destroys the state of this decompressor.
-		private void destroyAndThrow(IOException e) throws IOException {
-			state = -2;
-			exception = e;
-			destroyState();
-			// Do not set 'in' to null, so that calling close() is still possible
-			throw e;
 		}
 		
 		
@@ -991,6 +962,15 @@ public final class InflaterInputStream extends InputStream {
 		private static final int[] DISTANCE_TABLE = {16, 32, 48, 64, 81, 113, 146, 210, 275, 403, 532, 788, 1045, 1557,
 			2070, 3094, 4119, 6167, 8216, 12312, 16409, 24601, 32794, 49178, 65563, 98331, 131100, 196636, 262173, 393245};
 		
+	}
+	
+	
+	// A saved exception that is thrown on every read() or detach().
+	private record StickyException(InputStream input, IOException exception) implements State {
+		public StickyException {
+			Objects.requireNonNull(input);
+			Objects.requireNonNull(exception);
+		}
 	}
 	
 	
