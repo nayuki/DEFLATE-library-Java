@@ -106,7 +106,7 @@ public final class InflaterInputStream extends InputStream {
 	 * contain DEFLATE-compressed data with no headers or footers (e.g. must be unwrapped from
 	 * the zlib or gzip container formats). Detachability allows {@link #detach()} to be called,
 	 * and requires the specified input stream to support marking.
-	 * @param in the underlying input stream of raw DEFLATE-compressed data
+	 * @param in the underlying input stream of raw DEFLATE-compressed data (not {@code null})
 	 * @param detachable whether {@code detach()} can be called later
 	 * @param inBufLen the size of the internal read buffer, which must be positive
 	 * @throws NullPointerException if the input stream is {@code null}
@@ -115,7 +115,7 @@ public final class InflaterInputStream extends InputStream {
 	 */
 	public InflaterInputStream(InputStream in, boolean detachable, int inBufLen) {
 		// Handle the input stream and detachability
-		this.in = in;
+		this.in = Objects.requireNonNull(in);
 		if (inBufLen <= 0)
 			throw new IllegalArgumentException("Input buffer size must be positive");
 		isDetachable = detachable;
