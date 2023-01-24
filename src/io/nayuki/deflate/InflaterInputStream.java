@@ -23,7 +23,7 @@ public final class InflaterInputStream extends InputStream {
 	
 	/*---- Fields ----*/
 	
-	private InputStream in;
+	private InputStream input;
 	
 	
 	/* Data buffers */
@@ -115,7 +115,7 @@ public final class InflaterInputStream extends InputStream {
 	 */
 	public InflaterInputStream(InputStream in, boolean detachable, int inBufLen) {
 		// Handle the input stream and detachability
-		this.in = Objects.requireNonNull(in);
+		input = Objects.requireNonNull(in);
 		if (inBufLen <= 0)
 			throw new IllegalArgumentException("Input buffer size must be positive");
 		isDetachable = detachable;
@@ -188,7 +188,7 @@ public final class InflaterInputStream extends InputStream {
 		Objects.requireNonNull(b);
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
 			throw new ArrayIndexOutOfBoundsException();
-		if (in == null)
+		if (input == null)
 			throw new IllegalStateException("Stream already closed");
 		if (exception != null)
 			throw exception;
@@ -457,24 +457,24 @@ public final class InflaterInputStream extends InputStream {
 	public void detach() throws IOException {
 		if (!isDetachable)
 			throw new IllegalStateException("Detachability not specified at construction");
-		if (in == null)
+		if (input == null)
 			throw new IllegalStateException("Input stream already detached/closed");
 		if (exception != null)
 			throw exception;
 		
 		// Rewind the underlying stream, then skip over bytes that were already consumed.
 		// Note that a byte with some bits consumed is considered to be fully consumed.
-		in.reset();
+		input.reset();
 		int skip = inputBuffer.position() - inputBitBufferLength / 8;
 		assert skip >= 0;
 		while (skip > 0) {
-			long n = in.skip(skip);
+			long n = input.skip(skip);
 			if (n <= 0)
 				throw new EOFException();
 			skip -= n;
 		}
 		
-		in = null;
+		input = null;
 		state = -3;
 		destroyState();
 	}
@@ -487,10 +487,10 @@ public final class InflaterInputStream extends InputStream {
 	 * @throws IOException if an I/O exception occurred in the underlying stream
 	 */
 	@Override public void close() throws IOException {
-		if (in == null)
+		if (input == null)
 			return;
-		in.close();
-		in = null;
+		input.close();
+		input = null;
 		state = -3;
 		exception = null;
 		destroyState();
@@ -835,7 +835,7 @@ public final class InflaterInputStream extends InputStream {
 		// Read directly from input stream (without putting into input buffer)
 		while (len > 0) {
 			assert !inputBuffer.hasRemaining();
-			int n = in.read(b, off, len);
+			int n = input.read(b, off, len);
 			if (n == -1)
 				destroyAndThrow(new EOFException("Unexpected end of stream"));
 			off += n;
@@ -854,8 +854,8 @@ public final class InflaterInputStream extends InputStream {
 			throw new AssertionError("Input buffer not fully consumed yet");
 		
 		if (isDetachable)
-			in.mark(inputBuffer.capacity());
-		int n = in.read(inputBuffer.array());
+			input.mark(inputBuffer.capacity());
+		int n = input.read(inputBuffer.array());
 		if (n == -1)
 			destroyAndThrow(new EOFException("Unexpected end of stream"));
 		inputBuffer.position(0).limit(n);
