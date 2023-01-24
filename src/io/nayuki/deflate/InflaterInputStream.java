@@ -103,9 +103,7 @@ public final class InflaterInputStream extends InputStream {
 		Objects.requireNonNull(b);
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
 			throw new ArrayIndexOutOfBoundsException();
-		if (state instanceof Closed)
-			throw new IllegalStateException("Stream already closed");
-		else if (state instanceof Open st) {
+		if (state instanceof Open st) {
 			try {
 				return st.read(b, off, len);
 			} catch (IOException e) {
@@ -114,6 +112,8 @@ public final class InflaterInputStream extends InputStream {
 			}
 		} else if (state instanceof StickyException st)
 			throw st.exception;
+		else if (state instanceof Closed)
+			throw new IllegalStateException("Stream already closed");
 		else
 			throw new AssertionError("Unreachable");
 	}
@@ -133,13 +133,13 @@ public final class InflaterInputStream extends InputStream {
 	 * @throws IOException if an I/O exception occurred
 	 */
 	public void detach() throws IOException {
-		if (state instanceof Closed)
-			throw new IllegalStateException("Input stream already detached/closed");
-		else if (state instanceof Open st) {
+		if (state instanceof Open st) {
 			st.detach();
 			state = Closed.SINGLETON;
 		} else if (state instanceof StickyException st)
 			throw st.exception;
+		else if (state instanceof Closed)
+			throw new IllegalStateException("Input stream already detached/closed");
 		else
 			throw new AssertionError("Unreachable");
 	}
