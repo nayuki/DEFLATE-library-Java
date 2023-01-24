@@ -9,7 +9,6 @@
 package io.nayuki.deflate;
 
 import java.io.EOFException;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -20,9 +19,12 @@ import java.util.Objects;
 /**
  * Decompresses a DEFLATE data stream (raw format without zlib or gzip headers or footers) into a byte stream.
  */
-public final class InflaterInputStream extends FilterInputStream {
+public final class InflaterInputStream extends InputStream {
 	
 	/*---- Fields ----*/
+	
+	private InputStream in;
+	
 	
 	/* Data buffers */
 	
@@ -113,7 +115,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	 */
 	public InflaterInputStream(InputStream in, boolean detachable, int inBufLen) {
 		// Handle the input stream and detachability
-		super(in);
+		this.in = in;
 		if (inBufLen <= 0)
 			throw new IllegalArgumentException("Input buffer size must be positive");
 		isDetachable = detachable;
@@ -487,7 +489,7 @@ public final class InflaterInputStream extends FilterInputStream {
 	public void close() throws IOException {
 		if (in == null)
 			return;
-		super.close();
+		in.close();
 		in = null;
 		state = -3;
 		exception = null;
