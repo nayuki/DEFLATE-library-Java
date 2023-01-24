@@ -38,7 +38,7 @@ public final class DeflaterOutputStream extends FilterOutputStream {
 	
 	
 	
-	public void write(int b) throws IOException {
+	@Override public void write(int b) throws IOException {
 		if (isFinished)
 			throw new IllegalStateException();
 		if (index == buffer.length)
@@ -48,7 +48,7 @@ public final class DeflaterOutputStream extends FilterOutputStream {
 	}
 	
 	
-	public void write(byte[] b, int off, int len) throws IOException {
+	@Override public void write(byte[] b, int off, int len) throws IOException {
 		if (isFinished)
 			throw new IllegalStateException();
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
@@ -65,7 +65,7 @@ public final class DeflaterOutputStream extends FilterOutputStream {
 	}
 	
 	
-	public void flush() throws IOException {
+	@Override public void flush() throws IOException {
 		if (isFinished)
 			throw new IllegalStateException();
 		if (index > 5)  // If current block is not empty
@@ -82,7 +82,7 @@ public final class DeflaterOutputStream extends FilterOutputStream {
 	}
 	
 	
-	public void close() throws IOException {
+	@Override public void close() throws IOException {
 		if (!isFinished)
 			finish();
 		out.close();

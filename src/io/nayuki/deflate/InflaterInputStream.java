@@ -157,7 +157,7 @@ public final class InflaterInputStream extends InputStream {
 	 * stream was encountered at an unexpected position, or the compressed data has a format error
 	 * @throws IllegalStateException if the stream has already been closed
 	 */
-	public int read() throws IOException {
+	@Override public int read() throws IOException {
 		// In theory this method for reading a single byte could be implemented somewhat faster.
 		// We could take the logic of read(byte[],int,int) and simplify it for the special case
 		// of handling one byte. But if the caller chose to use this read() method instead of
@@ -183,7 +183,7 @@ public final class InflaterInputStream extends InputStream {
 	 * stream was encountered at an unexpected position, or the compressed data has a format error
 	 * @throws IllegalStateException if the stream has already been closed
 	 */
-	public int read(byte[] b, int off, int len) throws IOException {
+	@Override public int read(byte[] b, int off, int len) throws IOException {
 		// Check arguments and state
 		Objects.requireNonNull(b);
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
@@ -486,7 +486,7 @@ public final class InflaterInputStream extends InputStream {
 	 * It is idempotent to call this {@link #close()} method more than once.
 	 * @throws IOException if an I/O exception occurred in the underlying stream
 	 */
-	public void close() throws IOException {
+	@Override public void close() throws IOException {
 		if (in == null)
 			return;
 		in.close();

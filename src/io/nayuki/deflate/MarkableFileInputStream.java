@@ -34,22 +34,22 @@ public final class MarkableFileInputStream extends InputStream {
 	
 	
 	
-	public int read() throws IOException {
+	@Override public int read() throws IOException {
 		return raf.read();
 	}
 	
 	
-	public int read(byte[] b, int off, int len) throws IOException {
+	@Override public int read(byte[] b, int off, int len) throws IOException {
 		return raf.read(b, off, len);
 	}
 	
 	
-	public boolean markSupported() {
+	@Override public boolean markSupported() {
 		return true;
 	}
 	
 	
-	public void mark(int readLimit) {
+	@Override public void mark(int readLimit) {
 		try {
 			markPosition = raf.getFilePointer();
 		} catch (IOException e) {
@@ -61,7 +61,7 @@ public final class MarkableFileInputStream extends InputStream {
 	// Normally after a reset(), rereading the same file section will yield the same bytes.
 	// But this is not always true - e.g. due to concurrent writing. Thus this class does not
 	// provide a hard guarantee for the mark()/reset() behavior like BufferedInputStream does.
-	public void reset() {
+	@Override public void reset() {
 		try {
 			raf.seek(markPosition);
 		} catch (IOException e) {

@@ -197,14 +197,14 @@ public final class gunzip {
 		}
 		
 		
-		public void write(int b) throws IOException {
+		@Override public void write(int b) throws IOException {
 			out.write(b);
 			length++;
 			checksum.update(b);
 		}
 		
 		
-		public void write(byte[] b, int off, int len) throws IOException {
+		@Override public void write(byte[] b, int off, int len) throws IOException {
 			out.write(b, off, len);
 			length += len;
 			checksum.update(b, off, len);
