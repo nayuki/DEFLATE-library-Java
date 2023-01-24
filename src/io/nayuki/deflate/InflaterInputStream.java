@@ -873,33 +873,11 @@ public final class InflaterInputStream extends InputStream {
 					throw new EOFException();
 				skip -= n;
 			}
-			
-			state = -3;
-			destroyState();
 		}
 		
 		
 		public void close() throws IOException {
 			input.close();
-		}
-		
-		
-		// Clears all state variables except {in, state, exception}, to prevent accidental use of the
-		// stream thereafter. It is illegal to call read() or detach() after this method is called.
-		// The caller is responsible for manipulating the other state variables appropriately.
-		private void destroyState() {
-			isLastBlock = true;
-			literalLengthCodeTree = null;
-			literalLengthCodeTable = null;
-			distanceCodeTree = null;
-			distanceCodeTable = null;
-			
-			inputBuffer = null;
-			inputBitBuffer = 0;
-			inputBitBufferLength = 0;
-			outputBuffer = null;
-			dictionary = null;
-			dictionaryIndex = 0;
 		}
 		
 		
