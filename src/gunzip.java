@@ -52,37 +52,38 @@ public final class gunzip {
 		File outFile = new File(args[1]);
 		
 		try (DataInputStream din = new DataInputStream(new MarkableFileInputStream(inFile))) {
-			// Read and process fixed-size header
+			// Read and process 10-byte header
 			int flags;
 			{
-				byte[] b = new byte[10];
-				din.readFully(b);
-				if (b[0] != 0x1F || b[1] != (byte)0x8B)
+				if (din.readUnsignedShort() != 0x1F8B)
 					return "Invalid GZIP magic number";
-				if (b[2] != 8)
-					return "Unsupported compression method: " + (b[2] & 0xFF);
-				flags = b[3] & 0xFF;
+				int compressionMethod = din.readUnsignedByte();
+				if (compressionMethod != 8)
+					return "Unsupported compression method: " + compressionMethod;
+				flags = din.readUnsignedByte();
 				
 				// Reserved flags
 				if ((flags & 0xE0) != 0)
 					return "Reserved flags are set";
 				
 				// Modification time
-				int mtime = (b[4] & 0xFF) | (b[5] & 0xFF) << 8 | (b[6] & 0xFF) << 16 | b[7] << 24;
+				int mtime = readLittleEndianInt32(din);
 				if (mtime != 0)
 					System.err.println("Last modified: " + new Date(mtime * 1000L));
 				else
 					System.err.println("Last modified: N/A");
 				
 				// Extra flags
-				System.err.println("Extra flags: " + switch (b[8] & 0xFF) {
+				int extraFlags = din.readUnsignedByte();
+				System.err.println("Extra flags: " + switch (extraFlags) {
 					case 2 -> "Maximum compression";
 					case 4 -> "Fastest compression";
-					default -> "Unknown (" + (b[8] & 0xFF) + ")";
+					default -> "Unknown (" + extraFlags + ")";
 				});
 				
 				// Operating system
-				String os = switch (b[9] & 0xFF) {
+				int operatingSystem = din.readUnsignedByte();
+				String os = switch (operatingSystem) {
 					case   0 -> "FAT";
 					case   1 -> "Amiga";
 					case   2 -> "VMS";
