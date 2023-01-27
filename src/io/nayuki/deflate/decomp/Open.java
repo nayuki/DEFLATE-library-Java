@@ -514,9 +514,8 @@ public final class Open implements State {
 				return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
 			} else if (sym == 285)
 				return 258;
-			else {  // sym is 286 or 287
+			else  // sym is 286 or 287
 				throw new DataFormatException("Reserved run length symbol: " + sym);
-			}
 		}
 		
 		
@@ -530,9 +529,8 @@ public final class Open implements State {
 			else if (sym <= 29) {
 				int numExtraBits = (sym >>> 1) - 1;
 				return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
-			} else {  // sym is 30 or 31
+			} else  // sym is 30 or 31
 				throw new DataFormatException("Reserved distance symbol: " + sym);
-			}
 		}
 		
 	}
