@@ -399,6 +399,8 @@ public final class Open implements State {
 				throw new AssertionError("Unreachable state");
 			int result = 0;
 			while (result < len) {
+				assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
+				
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 				if (inputBitBufferLength < 48) {
 					ByteBuffer c = inputBuffer;  // Shorter name
@@ -496,7 +498,6 @@ public final class Open implements State {
 							inputBitBuffer >>>= numExtraBits;
 							inputBitBufferLength -= numExtraBits;
 						}
-						assert inputBitBufferLength >= 0;
 						
 					} else {  // sym == 256, end of block
 						isDone = true;
