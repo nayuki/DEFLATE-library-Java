@@ -124,19 +124,18 @@ public final class gunzip {
 			}
 			
 			// Start decompressing and writing output file
-			long elapsedTime;
 			try (OutputStream fout = new FileOutputStream(outFile)) {
 				LengthCrc32OutputStream lcout = new LengthCrc32OutputStream(fout);
 				InflaterInputStream iin = new InflaterInputStream(din, true);
 				byte[] buf = new byte[64 * 1024];
-				long startTime = System.nanoTime();
+				long elapsedTime = -System.nanoTime();
 				while (true) {
 					int n = iin.read(buf);
 					if (n == -1)
 						break;
 					lcout.write(buf, 0, n);
 				}
-				elapsedTime = System.nanoTime() - startTime;
+				elapsedTime += System.nanoTime();
 				System.err.printf("Input  speed: %.2f MB/s%n",  inFile.length() / 1e6 / elapsedTime * 1.0e9);
 				System.err.printf("Output speed: %.2f MB/s%n", outFile.length() / 1e6 / elapsedTime * 1.0e9);
 				
