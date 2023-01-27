@@ -18,7 +18,8 @@ import io.nayuki.deflate.decomp.StickyException;
 
 
 /**
- * Decompresses a DEFLATE data stream (raw format without zlib or gzip headers or footers) into a byte stream.
+ * Decompresses a DEFLATE data stream (raw format without
+ * zlib or gzip headers or footers) into a byte stream.
  */
 public final class InflaterInputStream extends InputStream {
 	
@@ -42,10 +43,11 @@ public final class InflaterInputStream extends InputStream {
 	
 	
 	/**
-	 * Constructs an inflater input stream over the specified underlying input stream, and with the
-	 * specified option for detachability. The underlying stream must contain DEFLATE-compressed data with
-	 * no headers or footers (e.g. must be unwrapped from the zlib or gzip container formats). Detachability
-	 * allows {@link #detach()} to be called, and requires the specified input stream to support marking.
+	 * Constructs an inflater input stream over the specified underlying input stream,
+	 * and with the specified option for detachability. The underlying stream must
+	 * contain DEFLATE-compressed data with no headers or footers (e.g. must be unwrapped
+	 * from the zlib or gzip container formats). Detachability allows {@link #detach()}
+	 * to be called, and requires the specified input stream to support marking.
 	 * @param in the underlying input stream of raw DEFLATE-compressed data
 	 * @param detachable whether {@code detach()} can be called later
 	 * @throws NullPointerException if the input stream is {@code null}
@@ -60,11 +62,11 @@ public final class InflaterInputStream extends InputStream {
 	
 	
 	/**
-	 * Constructs an inflater input stream over the specified underlying input stream, with the
-	 * specified options for detachability and input buffer size. The underlying stream must
-	 * contain DEFLATE-compressed data with no headers or footers (e.g. must be unwrapped from
-	 * the zlib or gzip container formats). Detachability allows {@link #detach()} to be called,
-	 * and requires the specified input stream to support marking.
+	 * Constructs an inflater input stream over the specified underlying input stream,
+	 * with the specified options for detachability and input buffer size. The underlying
+	 * stream must contain DEFLATE-compressed data with no headers or footers (e.g. must
+	 * be unwrapped from the zlib or gzip container formats). Detachability allows {@link
+	 * #detach()} to be called, and requires the specified input stream to support marking.
 	 * @param in the underlying input stream of raw DEFLATE-compressed data (not {@code null})
 	 * @param detachable whether {@code detach()} can be called later
 	 * @param inBufLen the size of the internal read buffer, which must be positive
@@ -88,12 +90,12 @@ public final class InflaterInputStream extends InputStream {
 	/*---- Methods ----*/
 	
 	/**
-	 * Reads the next byte of decompressed data from this stream. If data is available
-	 * then a number in the range [0, 255] is returned (blocking if necessary);
-	 * otherwise &minus;1 is returned if the end of stream is reached.
+	 * Reads the next byte of decompressed data from this stream. If data is
+	 * available then a number in the range [0, 255] is returned (blocking if
+	 * necessary); otherwise &minus;1 is returned if the end of stream is reached.
 	 * @return the next unsigned byte of data, or &minus;1 for the end of stream
-	 * @throws IOException if an I/O exception occurs in the underlying input stream, the end of
-	 * stream occurs at an unexpected position, or the compressed data has a format error
+	 * @throws IOException if an I/O exception occurs in the underlying input stream, the end
+	 * of stream occurs at an unexpected position, or the compressed data has a format error
 	 * @throws IllegalStateException if the stream has already been closed
 	 */
 	@Override public int read() throws IOException {
@@ -113,9 +115,9 @@ public final class InflaterInputStream extends InputStream {
 	
 	
 	/**
-	 * Reads some bytes from the decompressed data of this stream into the specified array's subrange.
-	 * This returns the number of data bytes that were stored into the array, and is in the range
-	 * [&minus;1, len]. A return value of 0 is allowed iff {@code len} is 0.
+	 * Reads some bytes from the decompressed data of this stream into the specified array's
+	 * subrange. This returns the number of data bytes that were stored into the array, and
+	 * is in the range [&minus;1, len]. A return value of 0 is allowed iff {@code len} is 0.
 	 * @throws NullPointerException if the array is {@code null}
 	 * @throws ArrayIndexOutOfBoundsException if the array subrange is out of bounds
 	 * @throws IOException if an I/O exception occurs in the underlying input stream, the end of
@@ -170,9 +172,9 @@ public final class InflaterInputStream extends InputStream {
 	
 	
 	/**
-	 * Closes this input stream and the underlying stream.
-	 * It is illegal to call {@link #read()} or {@link #detach()} after closing.
-	 * It is idempotent to call this {@link #close()} method more than once.
+	 * Closes this input stream and the underlying stream. It is illegal
+	 * to call {@link #read()} or {@link #detach()} after closing. It is
+	 * idempotent to call this {@link #close()} method more than once.
 	 * @throws IOException if an I/O exception occurs in the underlying stream
 	 */
 	@Override public void close() throws IOException {

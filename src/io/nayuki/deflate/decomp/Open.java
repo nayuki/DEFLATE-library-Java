@@ -214,11 +214,11 @@ public final class Open implements State {
 				distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
 			}
 			else {
-				// Read the current block's dynamic Huffman code tables from from the input buffers/stream,
-				// process the code lengths and computes the code trees, and ultimately set just the variables
-				// {literalLengthCodeTree, literalLengthCodeTable, distanceCodeTree, distanceCodeTable}.
-				// This might throw an IOException for actual I/O exceptions, unexpected end of stream,
-				// or a description of an invalid Huffman code.
+				// Read the current block's dynamic Huffman code tables from from the input
+				// buffers/stream, process the code lengths and computes the code trees, and ultimately
+				// set just the variables {literalLengthCodeTree, literalLengthCodeTable,
+				// distanceCodeTree, distanceCodeTable}. This might throw an IOException for actual I/O
+				// exceptions, unexpected end of stream, or a description of an invalid Huffman code.
 				int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
 				int numDistCodes    = readBits(5) +   1;  // hdist +   1
 				
@@ -477,9 +477,10 @@ public final class Open implements State {
 		
 		/*---- Huffman coding methods ----*/
 		
-		// Reads bits from the input buffers/stream and uses the given code tree to decode the next symbol.
-		// The returned symbol value is a non-negative integer. This throws an IOException if the end of stream
-		// is reached before a symbol is decoded, or if the underlying stream experiences an I/O exception.
+		// Reads bits from the input buffers/stream and uses the given code tree to
+		// decode the next symbol. The returned symbol value is a non-negative integer.
+		// This throws an IOException if the end of stream is reached before a symbol
+		// is decoded, or if the underlying stream experiences an I/O exception.
 		private int decodeSymbol(short[] codeTree) throws IOException {
 			int node = 0;  // An index into the codeTree array which signifies the current tree node
 			while (node >= 0) {
@@ -494,9 +495,10 @@ public final class Open implements State {
 		}
 		
 		
-		// Takes the given run length symbol in the range [257, 287], possibly reads some more input bits,
-		// and returns a number in the range [3, 258]. This throws an IOException if bits needed to be read
-		// but the end of stream was reached or the underlying stream experienced an I/O exception.
+		// Takes the given run length symbol in the range [257, 287], possibly
+		// reads some more input bits, and returns a number in the range [3, 258].
+		// This throws an IOException if bits needed to be read but the end of
+		// stream was reached or the underlying stream experienced an I/O exception.
 		private int decodeRunLength(int sym) throws IOException {
 			assert 257 <= sym && sym <= 287;
 			if (sym <= 264)
@@ -511,9 +513,10 @@ public final class Open implements State {
 		}
 		
 		
-		// Takes the given run length symbol in the range [0, 31], possibly reads some more input bits,
-		// and returns a number in the range [1, 32768]. This throws an IOException if bits needed to
-		// be read but the end of stream was reached or the underlying stream experienced an I/O exception.
+		// Takes the given run length symbol in the range [0, 31], possibly reads
+		// some more input bits, and returns a number in the range [1, 32768].
+		// This throws an IOException if bits needed to be read but the end of
+		// stream was reached or the underlying stream experienced an I/O exception.
 		private int decodeDistance(int sym) throws IOException {
 			assert 0 <= sym && sym <= 31;
 			if (sym <= 3)
@@ -785,8 +788,8 @@ public final class Open implements State {
 	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
 	
 	
-	// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i] =
-	// (base of run length) << 3 | (number of extra bits to read).
+	// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i]
+	// = (base of run length) << 3 | (number of extra bits to read).
 	private static final short[] RUN_LENGTH_TABLE = {
 		  3 << 3 | 0,
 		  4 << 3 | 0,
@@ -819,8 +822,8 @@ public final class Open implements State {
 		258 << 3 | 0,
 	};
 	
-	// For length symbols from 0 to 29 (inclusive). DISTANCE_TABLE[i] =
-	// (base of distance) << 4 | (number of extra bits to read).
+	// For length symbols from 0 to 29 (inclusive). DISTANCE_TABLE[i]
+	// = (base of distance) << 4 | (number of extra bits to read).
 	private static final int[] DISTANCE_TABLE = {
 		   0x1 << 4 |  0,
 		   0x2 << 4 |  0,
