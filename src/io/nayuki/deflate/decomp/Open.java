@@ -242,7 +242,7 @@ public final class Open implements State {
 		}
 		
 		
-		private int read(byte[] b, int off, int len) throws IOException {
+		private int read(byte[] b, final int off, int len) throws IOException {
 			// Check bit buffer invariants
 			if (inputBitBufferLength < 0 || inputBitBufferLength > 63
 					|| inputBitBuffer >>> inputBitBufferLength != 0)
@@ -251,7 +251,7 @@ public final class Open implements State {
 			len = Math.min(numRemainingBytes, len);
 			numRemainingBytes -= len;
 			int index = off;
-			int end = off + len;
+			final int end = off + len;
 			assert off <= end && end <= b.length;
 			
 			// First unpack saved bits
@@ -396,7 +396,7 @@ public final class Open implements State {
 		}
 		
 		
-		public int read(byte[] b, int off, int len) throws IOException {
+		public int read(byte[] b, final int off, final int len) throws IOException {
 			if (numPendingOutputBytes != 0)
 				throw new AssertionError("Unreachable state");
 			int result = 0;
@@ -430,7 +430,7 @@ public final class Open implements State {
 				// This allows us to do decoding entirely from the bit buffer, avoiding the byte buffer or actual I/O.
 				if (inputBitBufferLength >= 48) {  // Fast path
 					// Decode next literal/length symbol (a customized version of decodeSymbol())
-					int sym;
+					final int sym;
 					{
 						int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
 						assert temp >= 0;  // No need to mask off sign extension bits
@@ -472,7 +472,7 @@ public final class Open implements State {
 						// Decode next distance symbol (a customized version of decodeSymbol())
 						if (distanceCodeTree == null)
 							throw new DataFormatException("Length symbol encountered with empty distance code");
-						int distSym;
+						final int distSym;
 						{
 							int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
 							assert temp >= 0;  // No need to mask off sign extension bits
