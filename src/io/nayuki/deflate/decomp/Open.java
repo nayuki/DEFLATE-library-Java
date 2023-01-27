@@ -28,30 +28,31 @@ public final class Open implements State {
 	
 	/* Data buffers */
 	
-	// Buffer of bytes read from in.read() (the underlying input stream)
+	// Buffer of bytes read from input.read() (the underlying input stream)
 	private ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
 	
-	// Buffer of bits packed from the bytes in 'inputBuffer'
-	private long inputBitBuffer;       // 0 <= value < 2^inputBitBufferLength
+	// Buffer of bits packed from the bytes in `inputBuffer`
+	private long inputBitBuffer;       // Always in the range [0, 2^inputBitBufferLength)
 	private int inputBitBufferLength;  // Always in the range [0, 63]
 	
 	// Queued bytes to yield first when this.read() is called
-	private int numPendingOutputBytes;  // 0 <= value <= 257
+	private int numPendingOutputBytes;  // Always in the range [0, 257]
 	
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
 	private byte[] dictionary;
 	private int dictionaryIndex;
 	
-	// Generally speaking, the overall data flow of this decompressor looks like this:
-	//   in (the underlying input stream, declared in the superclass) -> in.read()
+	// The typical data flow in this decompressor looks like:
+	//   input (the underlying input stream) -> input.read()
 	//   -> inputBuffer -> packing logic in readBits()
 	//   -> inputBitBuffer -> readBit() or equivalent
-	//   -> various literal and length-distance symbols -> LZ77 decoding logic
-	//   -> dictionary, sometimes also outputBuffer -> copying to the caller's array
+	//   -> Huffman decoding logic for literal and length-distance symbols
+	//   -> LZ77 decoding logic -> dictionary
+	//   -> copying to the caller's array
 	//   -> b (the array passed into this.read(byte[],int,int)).
 	
 	
-	/* Substate */
+	/*---- Substates ----*/
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	// This starts as false, should eventually become true, and never changes back to false.
@@ -79,7 +80,7 @@ public final class Open implements State {
 	
 	
 	public int read(byte[] b, int off, int len) throws IOException {
-		int result = 0;  // Number of bytes filled in the array 'b'
+		int result = 0;  // Number of bytes filled in the array `b`
 		
 		// First move bytes (if any) from the output buffer
 		if (numPendingOutputBytes > 0) {
@@ -178,6 +179,7 @@ public final class Open implements State {
 				len -= n;
 			}
 			
+			// Copy output bytes to dictionary
 			for (int i = 0; i < result; i++) {
 				dictionary[dictionaryIndex] = b[off + i];
 				dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
@@ -212,8 +214,8 @@ public final class Open implements State {
 				distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
 			}
 			else {
-				// Reads the current block's dynamic Huffman code tables from from the input buffers/stream,
-				// processes the code lengths and computes the code trees, and ultimately sets just the variables
+				// Read the current block's dynamic Huffman code tables from from the input buffers/stream,
+				// process the code lengths and computes the code trees, and ultimately set just the variables
 				// {literalLengthCodeTree, literalLengthCodeTable, distanceCodeTree, distanceCodeTable}.
 				// This might throw an IOException for actual I/O exceptions, unexpected end of stream,
 				// or a description of an invalid Huffman code.

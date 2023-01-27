@@ -85,15 +85,15 @@ public final class InflaterInputStream extends InputStream {
 	}
 	
 	
-	/*---- Public API methods ----*/
+	/*---- Methods ----*/
 	
 	/**
 	 * Reads the next byte of decompressed data from this stream. If data is available
 	 * then a number in the range [0, 255] is returned (blocking if necessary);
 	 * otherwise &minus;1 is returned if the end of stream is reached.
 	 * @return the next unsigned byte of data, or &minus;1 for the end of stream
-	 * @throws IOException if an I/O exception occurred in the underlying input stream, the end of
-	 * stream was encountered at an unexpected position, or the compressed data has a format error
+	 * @throws IOException if an I/O exception occurs in the underlying input stream, the end of
+	 * stream occurs at an unexpected position, or the compressed data has a format error
 	 * @throws IllegalStateException if the stream has already been closed
 	 */
 	@Override public int read() throws IOException {
@@ -115,11 +115,11 @@ public final class InflaterInputStream extends InputStream {
 	/**
 	 * Reads some bytes from the decompressed data of this stream into the specified array's subrange.
 	 * This returns the number of data bytes that were stored into the array, and is in the range
-	 * [&minus;1, len]. Note that 0 can be returned even if the end of stream hasn't been reached yet.
+	 * [&minus;1, len]. A return value of 0 is allowed iff {@code len} is 0.
 	 * @throws NullPointerException if the array is {@code null}
 	 * @throws ArrayIndexOutOfBoundsException if the array subrange is out of bounds
-	 * @throws IOException if an I/O exception occurred in the underlying input stream, the end of
-	 * stream was encountered at an unexpected position, or the compressed data has a format error
+	 * @throws IOException if an I/O exception occurs in the underlying input stream, the end of
+	 * stream occurs at an unexpected position, or the compressed data has a format error
 	 * @throws IllegalStateException if the stream has already been closed
 	 */
 	@Override public int read(byte[] b, int off, int len) throws IOException {
@@ -154,7 +154,7 @@ public final class InflaterInputStream extends InputStream {
 	 * <p>This can only be called once, and is mutually exclusive with respect to calling
 	 * {@link #close()}. It is illegal to call {@link #read()} after detaching.</p>
 	 * @throws IllegalStateException if detach was already called or this stream has been closed
-	 * @throws IOException if an I/O exception occurred
+	 * @throws IOException if an I/O exception occurs in the underlying stream
 	 */
 	public void detach() throws IOException {
 		if (state instanceof Open st) {
@@ -173,7 +173,7 @@ public final class InflaterInputStream extends InputStream {
 	 * Closes this input stream and the underlying stream.
 	 * It is illegal to call {@link #read()} or {@link #detach()} after closing.
 	 * It is idempotent to call this {@link #close()} method more than once.
-	 * @throws IOException if an I/O exception occurred in the underlying stream
+	 * @throws IOException if an I/O exception occurs in the underlying stream
 	 */
 	@Override public void close() throws IOException {
 		if (state instanceof Open st)
