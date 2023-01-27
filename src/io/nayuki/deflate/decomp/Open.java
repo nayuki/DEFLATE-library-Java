@@ -37,7 +37,7 @@ public final class Open implements State {
 	private int inputBitBufferLength;  // Always in the range [0, 63]
 	
 	// Queued bytes to yield first when this.read() is called
-	private ByteBuffer outputBuffer;  // Should have length 257 (but pointless if longer)
+	private int numPendingOutputBytes;  // 0 <= value <= 257
 	
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
 	private byte[] dictionary;
@@ -78,7 +78,7 @@ public final class Open implements State {
 		inputBuffer = ByteBuffer.allocate(inBufLen).position(0).limit(0);
 		inputBitBuffer = 0;
 		inputBitBufferLength = 0;
-		outputBuffer = ByteBuffer.allocate(257).position(0).limit(0);
+		numPendingOutputBytes = 0;
 		dictionary = new byte[DICTIONARY_LENGTH];
 		dictionaryIndex = 0;
 		
@@ -92,14 +92,19 @@ public final class Open implements State {
 		int result = 0;  // Number of bytes filled in the array 'b'
 		
 		// First move bytes (if any) from the output buffer
-		if (outputBuffer.hasRemaining()) {
-			int n = Math.min(outputBuffer.remaining(), len);
-			outputBuffer.get(b, off, n);
-			result = n;
+		if (numPendingOutputBytes > 0) {
+			int n = Math.min(numPendingOutputBytes, len);
+			int dictIndex = (dictionaryIndex - numPendingOutputBytes) & DICTIONARY_MASK;
+			for (; result < n; result++) {
+				b[off + result] = dictionary[dictIndex];
+				dictIndex = (dictIndex + 1) & DICTIONARY_MASK;
+			}
+			numPendingOutputBytes -= n;
+			len -= n;
 		}
 		
 		while (result < len) {
-			assert !outputBuffer.hasRemaining();
+			assert numPendingOutputBytes == 0;
 			if (substate instanceof BetweenBlocks) {
 				if (isLastBlock)
 					break;
@@ -125,7 +130,7 @@ public final class Open implements State {
 				throw new AssertionError("Unreachable type");
 		}
 		
-		return result > 0 || outputBuffer.hasRemaining() || !(substate instanceof BetweenBlocks) || !isLastBlock ? result : -1;
+		return result > 0 || numPendingOutputBytes > 0 || !(substate instanceof BetweenBlocks) || !isLastBlock ? result : -1;
 	}
 	
 	
@@ -300,7 +305,7 @@ public final class Open implements State {
 		
 		public int read(byte[] b, int off, int len) throws IOException {
 			int result = 0;
-			outputBuffer.clear();
+			numPendingOutputBytes = 0;
 			while (result < len) {
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 				if (inputBitBufferLength < 48) {
@@ -423,7 +428,7 @@ public final class Open implements State {
 									b[off + result] = bb;
 									result++;
 								} else
-									outputBuffer.put(bb);
+									numPendingOutputBytes++;
 							}
 						}
 						
@@ -461,7 +466,7 @@ public final class Open implements State {
 								b[off + result] = bb;
 								result++;
 							} else
-								outputBuffer.put(bb);
+								numPendingOutputBytes++;
 						}
 					} else {  // sym == 256, end of block
 						isDone = true;
@@ -469,7 +474,6 @@ public final class Open implements State {
 					}
 				}
 			}
-			outputBuffer.flip();
 			return result;
 		}
 		
