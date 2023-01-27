@@ -230,12 +230,13 @@ public final class Open implements State {
 	
 	private final class UncompressedBlock implements Substate {
 		
-		private int numRemainingBytes;
+		private int numRemainingBytes;  // Non-negative
 		
 		
 		public UncompressedBlock() throws IOException {
 			alignInputToByte();
 			numRemainingBytes = readBits(16);
+			assert 0x0000 <= numRemainingBytes && numRemainingBytes <= 0xFFFF;
 			if (numRemainingBytes != (readBits(16) ^ 0xFFFF))
 				throw new DataFormatException("len/nlen mismatch in uncompressed block");
 		}
