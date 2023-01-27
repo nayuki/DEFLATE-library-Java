@@ -249,42 +249,42 @@ public final class Open implements State {
 				throw new AssertionError("Invalid input bit buffer state");
 			
 			len = Math.min(numRemainingBytes, len);
-			int result = 0;
+			numRemainingBytes -= len;
+			int index = off;
+			int end = off + len;
+			assert off <= end && end <= b.length;
 			
 			// First unpack saved bits
-			for (; len > 0 && inputBitBufferLength >= 8; result++, len--) {
-				b[off + result] = (byte)inputBitBuffer;
+			for (; inputBitBufferLength >= 8 && index < end; index++) {
+				b[index] = (byte)inputBitBuffer;
 				inputBitBuffer >>>= 8;
 				inputBitBufferLength -= 8;
 			}
 			
 			// Read from input buffer
 			{
-				int n = Math.min(len, inputBuffer.remaining());
+				int n = Math.min(end - index, inputBuffer.remaining());
 				assert inputBitBufferLength == 0 || n == 0;
-				inputBuffer.get(b, off + result, n);
-				result += n;
-				len -= n;
+				inputBuffer.get(b, index, n);
+				index += n;
 			}
 			
 			// Read directly from input stream (without putting into input buffer)
-			while (len > 0) {
-				assert !inputBuffer.hasRemaining();
-				int n = input.read(b, off + result, len);
+			while (index < end) {
+				assert inputBitBufferLength == 0 && !inputBuffer.hasRemaining();
+				int n = input.read(b, index, end - index);
 				if (n == -1)
 					throw new EOFException("Unexpected end of stream");
-				result += n;
-				len -= n;
+				index += n;
 			}
 			
 			// Copy output bytes to dictionary
-			for (int i = 0; i < result; i++) {
+			for (int i = 0; i < len; i++) {
 				dictionary[dictionaryIndex] = b[off + i];
 				dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 			}
 			
-			numRemainingBytes -= result;
-			return result;
+			return len;
 		}
 		
 		
