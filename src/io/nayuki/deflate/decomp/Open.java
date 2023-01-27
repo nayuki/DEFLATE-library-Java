@@ -226,6 +226,7 @@ public final class Open implements State {
 		}
 		
 		
+		// Returns [0, len], never -1.
 		private int read(byte[] b, final int off, int len) throws IOException {
 			// Check bit buffer invariants
 			if (inputBitBufferLength < 0 || inputBitBufferLength > 63
@@ -253,7 +254,7 @@ public final class Open implements State {
 				index += n;
 			}
 			
-			// Read directly from input stream (without putting into input buffer)
+			// Read directly from input stream, bypassing the input buffer
 			while (index < end) {
 				assert inputBitBufferLength == 0 && !inputBuffer.hasRemaining();
 				int n = input.read(b, index, end - index);
@@ -401,6 +402,7 @@ public final class Open implements State {
 		}
 		
 		
+		// Returns [0, len], never -1.
 		public int read(byte[] b, final int off, final int len) throws IOException {
 			int index = off;
 			final int end = off + len;

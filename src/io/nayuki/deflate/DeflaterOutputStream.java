@@ -20,6 +20,7 @@ import java.io.OutputStream;
  * expands the data slightly, but still conforms to the DEFLATE format.</p>
  * <p>This class performs its own buffering, so it is unnecessary to wrap a
  * {@link BufferedOutputStream} around the {@link OutputStream} given to the constructor.</p>
+ * @see InflaterInputStream
  */
 public final class DeflaterOutputStream extends FilterOutputStream {
 	

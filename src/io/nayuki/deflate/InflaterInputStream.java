@@ -20,6 +20,7 @@ import io.nayuki.deflate.decomp.StickyException;
 /**
  * Decompresses a DEFLATE data stream (raw format without
  * zlib or gzip headers or footers) into a byte stream.
+ * @see DeflaterOutputStream
  */
 public final class InflaterInputStream extends InputStream {
 	
