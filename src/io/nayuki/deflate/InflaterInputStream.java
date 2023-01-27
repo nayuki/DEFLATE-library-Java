@@ -153,10 +153,11 @@ public final class InflaterInputStream extends InputStream {
 	 * @throws IOException if an I/O exception occurred in the underlying stream
 	 */
 	@Override public void close() throws IOException {
-		if (state instanceof Open st) {
+		if (state instanceof Open st)
 			st.close();
-			state = Closed.SINGLETON;
-		}
+		else if (state instanceof StickyException st)
+			st.input().close();
+		state = Closed.SINGLETON;
 	}
 	
 }
