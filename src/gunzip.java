@@ -138,8 +138,8 @@ public final class gunzip {
 					lcout.write(buf, 0, n);
 				}
 				elapsedTime = System.nanoTime() - startTime;
-				System.err.printf("Input  speed: %.2f MiB/s%n",  inFile.length() / 1048576.0 / elapsedTime * 1.0e9);
-				System.err.printf("Output speed: %.2f MiB/s%n", outFile.length() / 1048576.0 / elapsedTime * 1.0e9);
+				System.err.printf("Input  speed: %.2f MB/s%n",  inFile.length() / 1e6 / elapsedTime * 1.0e9);
+				System.err.printf("Output speed: %.2f MB/s%n", outFile.length() / 1e6 / elapsedTime * 1.0e9);
 				
 				// Process gzip footer
 				iin.detach();
