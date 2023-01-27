@@ -84,7 +84,7 @@ public final class InflaterInputStream extends InputStream {
 		return switch (read(b)) {
 			case  1 -> b[0] & 0xFF;
 			case -1 -> -1;  // EOF
-			default -> throw new AssertionError("Unreachable logic");
+			default -> throw new AssertionError("Unreachable value");
 		};
 	}
 	
@@ -116,7 +116,7 @@ public final class InflaterInputStream extends InputStream {
 		else if (state instanceof Closed)
 			throw new IllegalStateException("Stream already closed");
 		else
-			throw new AssertionError("Unreachable");
+			throw new AssertionError("Unreachable type");
 	}
 	
 	
@@ -142,7 +142,7 @@ public final class InflaterInputStream extends InputStream {
 		else if (state instanceof Closed)
 			throw new IllegalStateException("Input stream already detached/closed");
 		else
-			throw new AssertionError("Unreachable");
+			throw new AssertionError("Unreachable type");
 	}
 	
 	
