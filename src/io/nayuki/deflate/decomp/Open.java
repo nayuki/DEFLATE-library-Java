@@ -528,128 +528,239 @@ public final class Open implements State {
 				throw new DataFormatException("Reserved distance symbol: " + sym);
 		}
 		
-	}
-	
-	
-	/* 
-	 * Converts the given array of symbol code lengths into a canonical code tree.
-	 * A symbol code length is either zero (absent from the tree) or a positive integer.
-	 * 
-	 * A code tree is an array of integers, where each pair represents a node.
-	 * Each pair is adjacent and starts on an even index. The first element of
-	 * the pair represents the left child and the second element represents the
-	 * right child. The root node is at index 0. If an element is non-negative,
-	 * then it is the index of the child node in the array. Otherwise it is the
-	 * bitwise complement of the leaf symbol. This tree is used in decodeSymbol()
-	 * and codeTreeToCodeTable(). Not every element of the array needs to be
-	 * used, nor do used elements need to be contiguous.
-	 * 
-	 * For example, this Huffman tree:
-	 *        o
-	 *       / \
-	 *      o   \
-	 *     / \   \
-	 *   'a' 'b' 'c'
-	 * is serialized as this array:
-	 *   {2, ~'c', ~'a', ~'b'}
-	 * because the root is located at index 0 and the other internal node is
-	 * located at index 2.
-	 */
-	private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
-		// Allocate array for the worst case if all symbols are present
-		var result = new short[(codeLengths.length - 1) * 2];
-		Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
-		result[0] = CODE_TREE_OPEN_SLOT;
-		result[1] = CODE_TREE_OPEN_SLOT;
-		int allocated = 2;  // Always even in this algorithm
 		
-		int maxCodeLen = 0;
-		for (byte cl : codeLengths) {
-			assert 0 <= cl && cl <= 15;
-			maxCodeLen = Math.max(cl, maxCodeLen);
-		}
-		if (maxCodeLen > 15)
-			throw new AssertionError("Maximum code length exceeds DEFLATE specification");
-		
-		// Allocate Huffman tree nodes according to ascending code lengths
-		for (int curCodeLen = 1; curCodeLen <= maxCodeLen; curCodeLen++) {
-			// Loop invariant: Each OPEN child slot in the result array has depth curCodeLen
+		/* 
+		 * Converts the given array of symbol code lengths into a canonical code tree.
+		 * A symbol code length is either zero (absent from the tree) or a positive integer.
+		 * 
+		 * A code tree is an array of integers, where each pair represents a node.
+		 * Each pair is adjacent and starts on an even index. The first element of
+		 * the pair represents the left child and the second element represents the
+		 * right child. The root node is at index 0. If an element is non-negative,
+		 * then it is the index of the child node in the array. Otherwise it is the
+		 * bitwise complement of the leaf symbol. This tree is used in decodeSymbol()
+		 * and codeTreeToCodeTable(). Not every element of the array needs to be
+		 * used, nor do used elements need to be contiguous.
+		 * 
+		 * For example, this Huffman tree:
+		 *        o
+		 *       / \
+		 *      o   \
+		 *     / \   \
+		 *   'a' 'b' 'c'
+		 * is serialized as this array:
+		 *   {2, ~'c', ~'a', ~'b'}
+		 * because the root is located at index 0 and the other internal node is
+		 * located at index 2.
+		 */
+		private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
+			// Allocate array for the worst case if all symbols are present
+			var result = new short[(codeLengths.length - 1) * 2];
+			Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
+			result[0] = CODE_TREE_OPEN_SLOT;
+			result[1] = CODE_TREE_OPEN_SLOT;
+			int allocated = 2;  // Always even in this algorithm
 			
-			// Allocate all symbols of current code length to open slots in ascending order
-			int resultIndex = 0;
-			for (int symbol = 0; ; ) {
-				// Find next symbol having current code length
-				while (symbol < codeLengths.length && codeLengths[symbol] != curCodeLen)
-					symbol++;
-				if (symbol == codeLengths.length)
-					break;  // No more symbols to process
-				
-				// Find next open child slot
-				while (resultIndex < allocated && result[resultIndex] != CODE_TREE_OPEN_SLOT)
-					resultIndex++;
-				if (resultIndex == allocated)  // No more slots left
-					throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
-				
-				// Put the symbol into the slot and increment
-				result[resultIndex] = (short)~symbol;
-				resultIndex++;
-				symbol++;
+			int maxCodeLen = 0;
+			for (byte cl : codeLengths) {
+				assert 0 <= cl && cl <= 15;
+				maxCodeLen = Math.max(cl, maxCodeLen);
 			}
+			if (maxCodeLen > 15)
+				throw new AssertionError("Maximum code length exceeds DEFLATE specification");
 			
-			// Take all open slots and deepen them by one level
-			for (int end = allocated; resultIndex < end; resultIndex++) {
-				if (result[resultIndex] == CODE_TREE_OPEN_SLOT) {
-					// Allocate a new node
-					assert allocated + 2 <= result.length;
-					result[resultIndex] = (short)allocated;
-					result[allocated + 0] = CODE_TREE_OPEN_SLOT;
-					result[allocated + 1] = CODE_TREE_OPEN_SLOT;
-					allocated += 2;
+			// Allocate Huffman tree nodes according to ascending code lengths
+			for (int curCodeLen = 1; curCodeLen <= maxCodeLen; curCodeLen++) {
+				// Loop invariant: Each OPEN child slot in the result array has depth curCodeLen
+				
+				// Allocate all symbols of current code length to open slots in ascending order
+				int resultIndex = 0;
+				for (int symbol = 0; ; ) {
+					// Find next symbol having current code length
+					while (symbol < codeLengths.length && codeLengths[symbol] != curCodeLen)
+						symbol++;
+					if (symbol == codeLengths.length)
+						break;  // No more symbols to process
+					
+					// Find next open child slot
+					while (resultIndex < allocated && result[resultIndex] != CODE_TREE_OPEN_SLOT)
+						resultIndex++;
+					if (resultIndex == allocated)  // No more slots left
+						throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
+					
+					// Put the symbol into the slot and increment
+					result[resultIndex] = (short)~symbol;
+					resultIndex++;
+					symbol++;
+				}
+				
+				// Take all open slots and deepen them by one level
+				for (int end = allocated; resultIndex < end; resultIndex++) {
+					if (result[resultIndex] == CODE_TREE_OPEN_SLOT) {
+						// Allocate a new node
+						assert allocated + 2 <= result.length;
+						result[resultIndex] = (short)allocated;
+						result[allocated + 0] = CODE_TREE_OPEN_SLOT;
+						result[allocated + 1] = CODE_TREE_OPEN_SLOT;
+						allocated += 2;
+					}
 				}
 			}
+			
+			// Check for unused open slots after all symbols are allocated
+			for (int i = 0; i < allocated; i++) {
+				if (result[i] == CODE_TREE_OPEN_SLOT)
+					throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
+			}
+			return result;
 		}
 		
-		// Check for unused open slots after all symbols are allocated
-		for (int i = 0; i < allocated; i++) {
-			if (result[i] == CODE_TREE_OPEN_SLOT)
-				throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
+		
+		/* 
+		 * Converts a code tree array into a fast look-up table that consumes up to
+		 * CODE_TABLE_BITS at once. Each entry i in the table encodes the result of
+		 * decoding starting from the root and consuming the bits of i starting from
+		 * the lowest-order bits.
+		 * 
+		 * Each array element encodes (numBitsConsumed << 11) | (node & 0x7FF), where:
+		 * - numBitsConsumed is a 4-bit unsigned integer in the range [1, CODE_TABLE_BITS].
+		 * - node is an 11-bit signed integer representing either the current node
+		 *   (which is a non-negative number) after consuming all the available bits
+		 *   from i, or the bitwise complement of the decoded symbol (so it's negative).
+		 * Note that each element is a non-negative number.
+		 */
+		private static short[] codeTreeToCodeTable(short[] codeTree) {
+			assert 1 <= CODE_TABLE_BITS && CODE_TABLE_BITS <= 15;
+			var result = new short[1 << CODE_TABLE_BITS];
+			for (int i = 0; i < result.length; i++) {
+				// Simulate decodeSymbol() using the bits of i
+				int node = 0;
+				int consumed = 0;
+				do {
+					node = codeTree[node + ((i >>> consumed) & 1)];
+					consumed++;
+				} while (node >= 0 && consumed < CODE_TABLE_BITS);
+				
+				assert 1 <= consumed && consumed <= 15;  // 4 bits unsigned
+				assert -1024 <= node && node <= 1023;  // 11 bits signed
+				result[i] = (short)(consumed << 11 | (node & 0x7FF));
+				assert result[i] >= 0;
+			}
+			return result;
 		}
-		return result;
-	}
-	
-	
-	/* 
-	 * Converts a code tree array into a fast look-up table that consumes up to
-	 * CODE_TABLE_BITS at once. Each entry i in the table encodes the result of
-	 * decoding starting from the root and consuming the bits of i starting from
-	 * the lowest-order bits.
-	 * 
-	 * Each array element encodes (numBitsConsumed << 11) | (node & 0x7FF), where:
-	 * - numBitsConsumed is a 4-bit unsigned integer in the range [1, CODE_TABLE_BITS].
-	 * - node is an 11-bit signed integer representing either the current node
-	 *   (which is a non-negative number) after consuming all the available bits
-	 *   from i, or the bitwise complement of the decoded symbol (so it's negative).
-	 * Note that each element is a non-negative number.
-	 */
-	private static short[] codeTreeToCodeTable(short[] codeTree) {
-		assert 1 <= CODE_TABLE_BITS && CODE_TABLE_BITS <= 15;
-		var result = new short[1 << CODE_TABLE_BITS];
-		for (int i = 0; i < result.length; i++) {
-			// Simulate decodeSymbol() using the bits of i
-			int node = 0;
-			int consumed = 0;
-			do {
-				node = codeTree[node + ((i >>> consumed) & 1)];
-				consumed++;
-			} while (node >= 0 && consumed < CODE_TABLE_BITS);
+		
+		
+		/*---- Constants and tables ----*/
+		
+		private static final int[] CODE_LENGTH_CODE_ORDER =
+			{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+		
+		private static final short[] FIXED_LITERAL_LENGTH_CODE_TREE;
+		private static final short[] FIXED_LITERAL_LENGTH_CODE_TABLE;
+		private static final short[] FIXED_DISTANCE_CODE_TREE;
+		private static final short[] FIXED_DISTANCE_CODE_TABLE;
+		
+		// For use in codeLengthsToCodeTree() only.
+		private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
+		private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
+		
+		// Any integer from 1 to 15 is valid. Affects speed but produces same output.
+		private static final int CODE_TABLE_BITS = 9;
+		private static final int CODE_TABLE_MASK = (1 << CODE_TABLE_BITS) - 1;
+		
+		
+		static {
+			var llcodelens = new byte[288];
+			Arrays.fill(llcodelens,   0, 144, (byte)8);
+			Arrays.fill(llcodelens, 144, 256, (byte)9);
+			Arrays.fill(llcodelens, 256, 280, (byte)7);
+			Arrays.fill(llcodelens, 280, 288, (byte)8);
 			
-			assert 1 <= consumed && consumed <= 15;  // 4 bits unsigned
-			assert -1024 <= node && node <= 1023;  // 11 bits signed
-			result[i] = (short)(consumed << 11 | (node & 0x7FF));
-			assert result[i] >= 0;
+			var distcodelens = new byte[32];
+			Arrays.fill(distcodelens, (byte)5);
+			
+			try {
+				FIXED_LITERAL_LENGTH_CODE_TREE = codeLengthsToCodeTree(llcodelens);
+				FIXED_DISTANCE_CODE_TREE = codeLengthsToCodeTree(distcodelens);
+			} catch (DataFormatException e) {
+				throw new AssertionError(e);
+			}
+			FIXED_LITERAL_LENGTH_CODE_TABLE = codeTreeToCodeTable(FIXED_LITERAL_LENGTH_CODE_TREE);
+			FIXED_DISTANCE_CODE_TABLE = codeTreeToCodeTable(FIXED_DISTANCE_CODE_TREE);
 		}
-		return result;
+		
+		
+		// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i]
+		// = (base of run length) << 3 | (number of extra bits to read).
+		private static final short[] RUN_LENGTH_TABLE = {
+			  3 << 3 | 0,
+			  4 << 3 | 0,
+			  5 << 3 | 0,
+			  6 << 3 | 0,
+			  7 << 3 | 0,
+			  8 << 3 | 0,
+			  9 << 3 | 0,
+			 10 << 3 | 0,
+			 11 << 3 | 1,
+			 13 << 3 | 1,
+			 15 << 3 | 1,
+			 17 << 3 | 1,
+			 19 << 3 | 2,
+			 23 << 3 | 2,
+			 27 << 3 | 2,
+			 31 << 3 | 2,
+			 35 << 3 | 3,
+			 43 << 3 | 3,
+			 51 << 3 | 3,
+			 59 << 3 | 3,
+			 67 << 3 | 4,
+			 83 << 3 | 4,
+			 99 << 3 | 4,
+			115 << 3 | 4,
+			131 << 3 | 5,
+			163 << 3 | 5,
+			195 << 3 | 5,
+			227 << 3 | 5,
+			258 << 3 | 0,
+		};
+		
+		// For length symbols from 0 to 29 (inclusive). DISTANCE_TABLE[i]
+		// = (base of distance) << 4 | (number of extra bits to read).
+		private static final int[] DISTANCE_TABLE = {
+			   0x1 << 4 |  0,
+			   0x2 << 4 |  0,
+			   0x3 << 4 |  0,
+			   0x4 << 4 |  0,
+			   0x5 << 4 |  1,
+			   0x7 << 4 |  1,
+			   0x9 << 4 |  2,
+			   0xD << 4 |  2,
+			  0x11 << 4 |  3,
+			  0x19 << 4 |  3,
+			  0x21 << 4 |  4,
+			  0x31 << 4 |  4,
+			  0x41 << 4 |  5,
+			  0x61 << 4 |  5,
+			  0x81 << 4 |  6,
+			  0xC1 << 4 |  6,
+			 0x101 << 4 |  7,
+			 0x181 << 4 |  7,
+			 0x201 << 4 |  8,
+			 0x301 << 4 |  8,
+			 0x401 << 4 |  9,
+			 0x601 << 4 |  9,
+			 0x801 << 4 | 10,
+			 0xC01 << 4 | 10,
+			0x1001 << 4 | 11,
+			0x1801 << 4 | 11,
+			0x2001 << 4 | 12,
+			0x3001 << 4 | 12,
+			0x4001 << 4 | 13,
+			0x6001 << 4 | 13,
+		};
+		
 	}
+	
 	
 	
 	/*---- I/O methods ----*/
@@ -739,45 +850,8 @@ public final class Open implements State {
 	}
 	
 	
-	/*---- Constants and tables ----*/
 	
-	private static final int[] CODE_LENGTH_CODE_ORDER =
-		{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-	
-	private static final short[] FIXED_LITERAL_LENGTH_CODE_TREE;
-	private static final short[] FIXED_LITERAL_LENGTH_CODE_TABLE;
-	private static final short[] FIXED_DISTANCE_CODE_TREE;
-	private static final short[] FIXED_DISTANCE_CODE_TABLE;
-	
-	// For use in codeLengthsToCodeTree() only.
-	private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
-	private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
-	
-	// Any integer from 1 to 15 is valid. Affects speed but produces same output.
-	private static final int CODE_TABLE_BITS = 9;
-	private static final int CODE_TABLE_MASK = (1 << CODE_TABLE_BITS) - 1;
-	
-	
-	static {
-		var llcodelens = new byte[288];
-		Arrays.fill(llcodelens,   0, 144, (byte)8);
-		Arrays.fill(llcodelens, 144, 256, (byte)9);
-		Arrays.fill(llcodelens, 256, 280, (byte)7);
-		Arrays.fill(llcodelens, 280, 288, (byte)8);
-		
-		var distcodelens = new byte[32];
-		Arrays.fill(distcodelens, (byte)5);
-		
-		try {
-			FIXED_LITERAL_LENGTH_CODE_TREE = codeLengthsToCodeTree(llcodelens);
-			FIXED_DISTANCE_CODE_TREE = codeLengthsToCodeTree(distcodelens);
-		} catch (DataFormatException e) {
-			throw new AssertionError(e);
-		}
-		FIXED_LITERAL_LENGTH_CODE_TABLE = codeTreeToCodeTable(FIXED_LITERAL_LENGTH_CODE_TREE);
-		FIXED_DISTANCE_CODE_TABLE = codeTreeToCodeTable(FIXED_DISTANCE_CODE_TREE);
-	}
-	
+	/*---- Constants ----*/
 	
 	// Must be a power of 2. Do not change this constant value. If the value is decreased, then
 	// decompression may produce different data that violates the DEFLATE spec (but no crashes).
@@ -786,75 +860,5 @@ public final class Open implements State {
 	
 	// This is why the above must be a power of 2.
 	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
-	
-	
-	// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i]
-	// = (base of run length) << 3 | (number of extra bits to read).
-	private static final short[] RUN_LENGTH_TABLE = {
-		  3 << 3 | 0,
-		  4 << 3 | 0,
-		  5 << 3 | 0,
-		  6 << 3 | 0,
-		  7 << 3 | 0,
-		  8 << 3 | 0,
-		  9 << 3 | 0,
-		 10 << 3 | 0,
-		 11 << 3 | 1,
-		 13 << 3 | 1,
-		 15 << 3 | 1,
-		 17 << 3 | 1,
-		 19 << 3 | 2,
-		 23 << 3 | 2,
-		 27 << 3 | 2,
-		 31 << 3 | 2,
-		 35 << 3 | 3,
-		 43 << 3 | 3,
-		 51 << 3 | 3,
-		 59 << 3 | 3,
-		 67 << 3 | 4,
-		 83 << 3 | 4,
-		 99 << 3 | 4,
-		115 << 3 | 4,
-		131 << 3 | 5,
-		163 << 3 | 5,
-		195 << 3 | 5,
-		227 << 3 | 5,
-		258 << 3 | 0,
-	};
-	
-	// For length symbols from 0 to 29 (inclusive). DISTANCE_TABLE[i]
-	// = (base of distance) << 4 | (number of extra bits to read).
-	private static final int[] DISTANCE_TABLE = {
-		   0x1 << 4 |  0,
-		   0x2 << 4 |  0,
-		   0x3 << 4 |  0,
-		   0x4 << 4 |  0,
-		   0x5 << 4 |  1,
-		   0x7 << 4 |  1,
-		   0x9 << 4 |  2,
-		   0xD << 4 |  2,
-		  0x11 << 4 |  3,
-		  0x19 << 4 |  3,
-		  0x21 << 4 |  4,
-		  0x31 << 4 |  4,
-		  0x41 << 4 |  5,
-		  0x61 << 4 |  5,
-		  0x81 << 4 |  6,
-		  0xC1 << 4 |  6,
-		 0x101 << 4 |  7,
-		 0x181 << 4 |  7,
-		 0x201 << 4 |  8,
-		 0x301 << 4 |  8,
-		 0x401 << 4 |  9,
-		 0x601 << 4 |  9,
-		 0x801 << 4 | 10,
-		 0xC01 << 4 | 10,
-		0x1001 << 4 | 11,
-		0x1801 << 4 | 11,
-		0x2001 << 4 | 12,
-		0x3001 << 4 | 12,
-		0x4001 << 4 | 13,
-		0x6001 << 4 | 13,
-	};
 	
 }
