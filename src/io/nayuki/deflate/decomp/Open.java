@@ -422,18 +422,23 @@ public final class Open implements State {
 					ByteBuffer c = inputBuffer;  // Shorter name
 					int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
 					assert 0 <= numBytes && numBytes <= 8;
-					if (numBytes == 2) {  // Only implement special cases that occur frequently in practice
-						inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBufferLength;
-						inputBitBufferLength += 2 * 8;
-					} else if (numBytes == 3) {
-						inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBufferLength;
-						inputBitBufferLength += 3 * 8;
-					} else if (numBytes == 4) {
-						inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
-						inputBitBufferLength += 4 * 8;
-					} else {  // This slower general logic is valid for 0 <= numBytes <= 8
-						for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
-							inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
+					switch (numBytes) {  // Only implement special cases that occur frequently in practice
+						case 2:
+							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBufferLength;
+							inputBitBufferLength += 2 * 8;
+							break;
+						case 3:
+							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBufferLength;
+							inputBitBufferLength += 3 * 8;
+							break;
+						case 4:
+							inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
+							inputBitBufferLength += 4 * 8;
+							break;
+						default:  // This slower general logic is valid for 0 <= numBytes <= 8
+							for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
+								inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
+							break;
 					}
 				}
 				
