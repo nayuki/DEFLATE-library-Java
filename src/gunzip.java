@@ -118,11 +118,8 @@ public final class gunzip {
 				}
 				if (flags.get(3))
 					System.err.println("File name: " + readNullTerminatedString(din));
-				if (flags.get(1)) {
-					byte[] b = new byte[2];
-					din.readFully(b);
-					System.err.printf("Header CRC-16: %04X%n", (b[0] & 0xFF) | (b[1] & 0xFF) << 8);
-				}
+				if (flags.get(1))
+					System.err.printf("Header CRC-16: %04X%n", readLittleEndianUint16(din));
 				if (flags.get(4))
 					System.err.println("Comment: " + readNullTerminatedString(din));
 			}
