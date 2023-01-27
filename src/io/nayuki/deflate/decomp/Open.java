@@ -279,9 +279,11 @@ public final class Open implements State {
 			}
 			
 			// Copy output bytes to dictionary
-			for (int i = 0; i < len; i++) {
-				dictionary[dictionaryIndex] = b[off + i];
-				dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+			for (index = off; index < end; ) {
+				int n = Math.min(end - index, dictionary.length - dictionaryIndex);
+				System.arraycopy(b, index, dictionary, dictionaryIndex, n);
+				index += n;
+				dictionaryIndex = (dictionaryIndex + n) & DICTIONARY_MASK;
 			}
 			
 			return len;
