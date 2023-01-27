@@ -80,7 +80,7 @@ public final class InflaterInputStream extends InputStream {
 		// the bulk read(byte[]) method, then they have already chosen to not care about speed.
 		// Therefore speeding up this method would result in needless complexity. Instead,
 		// we chose to optimize this method for simplicity and ease of verifying correctness.
-		byte[] b = new byte[1];
+		var b = new byte[1];
 		return switch (read(b)) {
 			case  1 -> b[0] & 0xFF;
 			case -1 -> -1;  // EOF

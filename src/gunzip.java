@@ -45,14 +45,14 @@ public final class gunzip {
 		if (args.length != 2)
 			return "Usage: java gunzip InputFile.gz OutputFile";
 		
-		File inFile = new File(args[0]);
+		var inFile = new File(args[0]);
 		if (!inFile.exists())
 			return "Input file does not exist: " + inFile;
 		if (inFile.isDirectory())
 			return "Input file is a directory: " + inFile;
-		File outFile = new File(args[1]);
+		var outFile = new File(args[1]);
 		
-		try (DataInputStream din = new DataInputStream(new MarkableFileInputStream(inFile))) {
+		try (var din = new DataInputStream(new MarkableFileInputStream(inFile))) {
 			// Read and process 10-byte header
 			BitSet flags;
 			{
@@ -125,9 +125,9 @@ public final class gunzip {
 			
 			// Start decompressing and writing output file
 			try (OutputStream fout = new FileOutputStream(outFile)) {
-				LengthCrc32OutputStream lcout = new LengthCrc32OutputStream(fout);
-				InflaterInputStream iin = new InflaterInputStream(din, true);
-				byte[] buf = new byte[64 * 1024];
+				var lcout = new LengthCrc32OutputStream(fout);
+				var iin = new InflaterInputStream(din, true);
+				var buf = new byte[64 * 1024];
 				long elapsedTime = -System.nanoTime();
 				while (true) {
 					int n = iin.read(buf);
@@ -158,7 +158,7 @@ public final class gunzip {
 	/*---- Helper methods and class ----*/
 	
 	private static String readNullTerminatedString(DataInput in) throws IOException {
-		ByteArrayOutputStream bout = new ByteArrayOutputStream();
+		var bout = new ByteArrayOutputStream();
 		while (true) {
 			byte b = in.readByte();
 			if (b == 0)

@@ -232,13 +232,13 @@ public final class Open implements State {
 				
 				// Read the code length code lengths
 				int numCodeLenCodes = readBits(4) +   4;  // hclen +   4
-				byte[] codeLenCodeLen = new byte[19];  // This array is filled in a strange order
+				var codeLenCodeLen = new byte[19];  // This array is filled in a strange order
 				for (int i = 0; i < numCodeLenCodes; i++)
 					codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
 				short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
 				
 				// Read the main code lengths and handle runs
-				byte[] codeLens = new byte[numLitLenCodes + numDistCodes];
+				var codeLens = new byte[numLitLenCodes + numDistCodes];
 				byte runVal = -1;
 				int runLen = 0;
 				for (int i = 0; i < codeLens.length; ) {
@@ -562,7 +562,7 @@ public final class Open implements State {
 	 */
 	private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
 		// Allocate array for the worst case if all symbols are present
-		short[] result = new short[(codeLengths.length - 1) * 2];
+		var result = new short[(codeLengths.length - 1) * 2];
 		Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
 		result[0] = CODE_TREE_OPEN_SLOT;
 		result[1] = CODE_TREE_OPEN_SLOT;
@@ -638,7 +638,7 @@ public final class Open implements State {
 	 */
 	private static short[] codeTreeToCodeTable(short[] codeTree) {
 		assert 1 <= CODE_TABLE_BITS && CODE_TABLE_BITS <= 15;
-		short[] result = new short[1 << CODE_TABLE_BITS];
+		var result = new short[1 << CODE_TABLE_BITS];
 		for (int i = 0; i < result.length; i++) {
 			// Simulate decodeSymbol() using the bits of i
 			int node = 0;
@@ -764,13 +764,13 @@ public final class Open implements State {
 	
 	
 	static {
-		byte[] llcodelens = new byte[288];
+		var llcodelens = new byte[288];
 		Arrays.fill(llcodelens,   0, 144, (byte)8);
 		Arrays.fill(llcodelens, 144, 256, (byte)9);
 		Arrays.fill(llcodelens, 256, 280, (byte)7);
 		Arrays.fill(llcodelens, 280, 288, (byte)8);
 		
-		byte[] distcodelens = new byte[32];
+		var distcodelens = new byte[32];
 		Arrays.fill(distcodelens, (byte)5);
 		
 		try {
