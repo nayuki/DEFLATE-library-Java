@@ -18,6 +18,8 @@ import io.nayuki.deflate.DataFormatException;
 
 public final class Open implements State {
 	
+	/*---- Fields ----*/
+	
 	// The underlying stream to read from
 	public final InputStream input;
 	
@@ -25,22 +27,6 @@ public final class Open implements State {
 	// input stream is read, and whether calling detach() is allowed.
 	private final boolean isDetachable;
 	
-	
-	/* Data buffers */
-	
-	// Buffer of bytes read from input.read() (the underlying input stream)
-	private ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
-	
-	// Buffer of bits packed from the bytes in `inputBuffer`
-	private long inputBitBuffer = 0;       // Always in the range [0, 2^inputBitBufferLength)
-	private int inputBitBufferLength = 0;  // Always in the range [0, 63]
-	
-	// Queued bytes to yield first when this.read() is called
-	private int numPendingOutputBytes = 0;  // Always in the range [0, 257]
-	
-	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
-	private byte[] dictionary = new byte[DICTIONARY_LENGTH];
-	private int dictionaryIndex = 0;
 	
 	// The typical data flow in this decompressor looks like:
 	//   input (the underlying input stream) -> input.read()
@@ -51,15 +37,31 @@ public final class Open implements State {
 	//   -> copying to the caller's array
 	//   -> b (the array passed into this.read(byte[],int,int)).
 	
+	// Buffer of bytes read from input.read() (the underlying input stream)
+	private ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
 	
-	/*---- Substates ----*/
+	// Buffer of bits packed from the bytes in `inputBuffer`
+	private long inputBitBuffer = 0;       // Always in the range [0, 2^inputBitBufferLength)
+	private int inputBitBufferLength = 0;  // Always in the range [0, 63]
+	
+	
+	private Substate substate = BetweenBlocks.SINGLETON;
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	// This starts as false, should eventually become true, and never changes back to false.
 	private boolean isLastBlock = false;
 	
-	private Substate substate = BetweenBlocks.SINGLETON;
 	
+	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
+	private byte[] dictionary = new byte[DICTIONARY_LENGTH];
+	private int dictionaryIndex = 0;
+	
+	// Queued bytes to yield first when this.read() is called
+	private int numPendingOutputBytes = 0;  // Always in the range [0, 257]
+	
+	
+	
+	/*---- Constructor ----*/
 	
 	public Open(InputStream in, boolean detachable, int inBufLen) {
 		input = in;
@@ -67,6 +69,9 @@ public final class Open implements State {
 		inputBuffer = ByteBuffer.allocate(inBufLen).position(0).limit(0);
 	}
 	
+	
+	
+	/*---- Public methods ----*/
 	
 	public int read(byte[] b, int off, int len) throws IOException {
 		int result = 0;  // Number of bytes filled in the array `b`
@@ -114,10 +119,113 @@ public final class Open implements State {
 	}
 	
 	
+	public void detach() throws IOException {
+		if (!isDetachable)
+			throw new IllegalStateException("Detachability not specified at construction");
+		
+		// Rewind the underlying stream, then skip over bytes that were already consumed.
+		// Note that a byte with some bits consumed is considered to be fully consumed.
+		input.reset();
+		int skip = inputBuffer.position() - inputBitBufferLength / 8;
+		assert skip >= 0;
+		while (skip > 0) {
+			long n = input.skip(skip);
+			if (n <= 0)
+				throw new EOFException();
+			skip -= n;
+		}
+	}
+	
+	
+	public void close() throws IOException {
+		input.close();
+	}
+	
+	
+	
+	/*---- Private methods ----*/
+	
+	// Returns the given number of least significant bits from the bit buffer.
+	// This updates the bit buffer state and possibly also the byte buffer state.
+	private int readBits(int numBits) throws IOException {
+		// Check arguments and invariants
+		assert 1 <= numBits && numBits <= 16;  // Note: DEFLATE uses up to 16, but this method is correct up to 31
+		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
+		assert inputBitBuffer >>> inputBitBufferLength == 0;  // Ensure high-order bits are clean
+		
+		// Ensure there is enough data in the bit buffer to satisfy the request
+		while (inputBitBufferLength < numBits) {
+			while (!inputBuffer.hasRemaining())  // Fill and retry
+				fillInputBuffer();
+			
+			// Pack as many bytes as possible from input byte buffer into the bit buffer
+			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
+			if (numBytes <= 0)
+				throw new AssertionError("Impossible state");
+			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8)
+				inputBitBuffer |= (inputBuffer.get() & 0xFFL) << inputBitBufferLength;
+			assert inputBitBufferLength <= 64;  // Can temporarily be 64
+		}
+		
+		// Extract the bits to return
+		int result = (int)inputBitBuffer & ((1 << numBits) - 1);
+		inputBitBuffer >>>= numBits;
+		inputBitBufferLength -= numBits;
+		
+		// Check return and recheck invariants
+		assert result >>> numBits == 0;
+		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
+		assert inputBitBuffer >>> inputBitBufferLength == 0;
+		return result;
+	}
+	
+	
+	// Fills the input byte buffer with new data read from the underlying input stream.
+	// Requires the buffer to be fully consumed before being called. This method sets
+	// inputBufferLength to a value in the range [-1, inputBuffer.length] and inputBufferIndex to 0.
+	private void fillInputBuffer() throws IOException {
+		if (inputBuffer.hasRemaining())
+			throw new AssertionError("Input buffer not fully consumed yet");
+		
+		if (isDetachable)
+			input.mark(inputBuffer.capacity());
+		int n = input.read(inputBuffer.array());
+		if (n == -1)
+			throw new EOFException("Unexpected end of stream");
+		inputBuffer.position(0).limit(n);
+	}
+	
+	
+	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
+	private void alignInputToByte() {
+		int discard = inputBitBufferLength & 7;
+		inputBitBuffer >>>= discard;
+		inputBitBufferLength -= discard;
+		assert inputBitBufferLength % 8 == 0;
+	}
+	
+	
+	
+	/*---- Constants ----*/
+	
+	// Must be a power of 2. Do not change this constant value. If the value is decreased, then
+	// decompression may produce different data that violates the DEFLATE spec (but no crashes).
+	// If the value is increased, the behavior stays the same but memory is wasted with no benefit.
+	private static final int DICTIONARY_LENGTH = 32 * 1024;
+	
+	// This is why the above must be a power of 2.
+	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
+	
+	
+	
+	/*---- Substate types ----*/
+	
 	private interface Substate {}
 	
 	
+	
 	private enum BetweenBlocks implements Substate { SINGLETON; }
+	
 	
 	
 	private final class UncompressedBlock implements Substate {
@@ -184,6 +292,7 @@ public final class Open implements State {
 		}
 		
 	}
+	
 	
 	
 	private final class HuffmanBlock implements Substate {
@@ -749,105 +858,5 @@ public final class Open implements State {
 		};
 		
 	}
-	
-	
-	
-	/*---- I/O methods ----*/
-	
-	// Returns the given number of least significant bits from the bit buffer.
-	// This updates the bit buffer state and possibly also the byte buffer state.
-	private int readBits(int numBits) throws IOException {
-		// Check arguments and invariants
-		assert 1 <= numBits && numBits <= 16;  // Note: DEFLATE uses up to 16, but this method is correct up to 31
-		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
-		assert inputBitBuffer >>> inputBitBufferLength == 0;  // Ensure high-order bits are clean
-		
-		// Ensure there is enough data in the bit buffer to satisfy the request
-		while (inputBitBufferLength < numBits) {
-			while (!inputBuffer.hasRemaining())  // Fill and retry
-				fillInputBuffer();
-			
-			// Pack as many bytes as possible from input byte buffer into the bit buffer
-			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
-			if (numBytes <= 0)
-				throw new AssertionError("Impossible state");
-			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8)
-				inputBitBuffer |= (inputBuffer.get() & 0xFFL) << inputBitBufferLength;
-			assert inputBitBufferLength <= 64;  // Can temporarily be 64
-		}
-		
-		// Extract the bits to return
-		int result = (int)inputBitBuffer & ((1 << numBits) - 1);
-		inputBitBuffer >>>= numBits;
-		inputBitBufferLength -= numBits;
-		
-		// Check return and recheck invariants
-		assert result >>> numBits == 0;
-		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
-		assert inputBitBuffer >>> inputBitBufferLength == 0;
-		return result;
-	}
-	
-	
-	// Fills the input byte buffer with new data read from the underlying input stream.
-	// Requires the buffer to be fully consumed before being called. This method sets
-	// inputBufferLength to a value in the range [-1, inputBuffer.length] and inputBufferIndex to 0.
-	private void fillInputBuffer() throws IOException {
-		if (inputBuffer.hasRemaining())
-			throw new AssertionError("Input buffer not fully consumed yet");
-		
-		if (isDetachable)
-			input.mark(inputBuffer.capacity());
-		int n = input.read(inputBuffer.array());
-		if (n == -1)
-			throw new EOFException("Unexpected end of stream");
-		inputBuffer.position(0).limit(n);
-	}
-	
-	
-	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
-	private void alignInputToByte() {
-		int discard = inputBitBufferLength & 7;
-		inputBitBuffer >>>= discard;
-		inputBitBufferLength -= discard;
-		assert inputBitBufferLength % 8 == 0;
-	}
-	
-	
-	/*---- State management methods ----*/
-	
-	public void detach() throws IOException {
-		if (!isDetachable)
-			throw new IllegalStateException("Detachability not specified at construction");
-		
-		// Rewind the underlying stream, then skip over bytes that were already consumed.
-		// Note that a byte with some bits consumed is considered to be fully consumed.
-		input.reset();
-		int skip = inputBuffer.position() - inputBitBufferLength / 8;
-		assert skip >= 0;
-		while (skip > 0) {
-			long n = input.skip(skip);
-			if (n <= 0)
-				throw new EOFException();
-			skip -= n;
-		}
-	}
-	
-	
-	public void close() throws IOException {
-		input.close();
-	}
-	
-	
-	
-	/*---- Constants ----*/
-	
-	// Must be a power of 2. Do not change this constant value. If the value is decreased, then
-	// decompression may produce different data that violates the DEFLATE spec (but no crashes).
-	// If the value is increased, the behavior stays the same but memory is wasted with no benefit.
-	private static final int DICTIONARY_LENGTH = 32 * 1024;
-	
-	// This is why the above must be a power of 2.
-	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
 	
 }

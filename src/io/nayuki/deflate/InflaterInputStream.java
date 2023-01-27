@@ -28,6 +28,7 @@ public final class InflaterInputStream extends InputStream {
 	private State state;
 	
 	
+	
 	/*---- Constructors ----*/
 	
 	/**
@@ -85,6 +86,7 @@ public final class InflaterInputStream extends InputStream {
 		}
 		state = new Open(in, detachable, inBufLen);
 	}
+	
 	
 	
 	/*---- Methods ----*/
