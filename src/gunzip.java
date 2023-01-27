@@ -125,8 +125,7 @@ public final class gunzip {
 			
 			// Start decompressing and writing output file
 			long elapsedTime;
-			OutputStream fout = new FileOutputStream(outFile);
-			try {
+			try (OutputStream fout = new FileOutputStream(outFile)) {
 				LengthCrc32OutputStream lcout = new LengthCrc32OutputStream(fout);
 				InflaterInputStream iin = new InflaterInputStream(din, true);
 				byte[] buf = new byte[64 * 1024];
@@ -147,8 +146,6 @@ public final class gunzip {
 					return "Decompression CRC-32 mismatch";
 				if ((int)lcout.getLength() != readLittleEndianInt32(din))
 					return "Decompressed size mismatch";
-			} finally {
-				fout.close();
 			}
 			
 		} catch (IOException e) {
