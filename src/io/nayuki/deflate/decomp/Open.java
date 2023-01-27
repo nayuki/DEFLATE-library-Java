@@ -395,8 +395,9 @@ public final class Open implements State {
 		
 		
 		public int read(byte[] b, int off, int len) throws IOException {
+			if (numPendingOutputBytes != 0)
+				throw new AssertionError("Unreachable state");
 			int result = 0;
-			numPendingOutputBytes = 0;
 			while (result < len) {
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 				if (inputBitBufferLength < 48) {
