@@ -15,8 +15,8 @@ import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.BitSet;
-import java.util.Date;
 import java.util.zip.CRC32;
 import io.nayuki.deflate.InflaterInputStream;
 import io.nayuki.deflate.MarkableFileInputStream;
@@ -72,7 +72,7 @@ public final class gunzip {
 				// Modification time
 				int mtime = readLittleEndianInt32(din);
 				if (mtime != 0)
-					System.err.println("Last modified: " + new Date(mtime * 1000L));
+					System.err.println("Last modified: " + Instant.EPOCH.plusSeconds(mtime));
 				else
 					System.err.println("Last modified: N/A");
 				
