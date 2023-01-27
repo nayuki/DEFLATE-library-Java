@@ -102,7 +102,7 @@ public final class gunzip {
 					case  12 -> "QDOS";
 					case  13 -> "Acorn RISCOS";
 					case 255 -> "Unknown";
-					default  -> "Really unknown";
+					default  -> "Really unknown (" + operatingSystem + ")";
 				};
 				System.err.println("Operating system: " + os);
 			}
