@@ -125,7 +125,7 @@ public final class InflaterInputStream extends InputStream {
 	@Override public int read(byte[] b, int off, int len) throws IOException {
 		// Check arguments and state
 		Objects.requireNonNull(b);
-		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
+		if (!(0 <= off && off <= b.length && 0 <= len && len <= b.length - off))
 			throw new ArrayIndexOutOfBoundsException();
 		if (state instanceof Open st) {
 			try {
