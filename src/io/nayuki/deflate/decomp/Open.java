@@ -304,6 +304,7 @@ public final class Open implements State {
 		private final short[] literalLengthCodeTable;  // Derived from literalLengthCodeTree; not null
 		private final short[] distanceCodeTree;   // Can be null
 		private final short[] distanceCodeTable;  // Derived from distanceCodeTree; same nullness
+		private final int maxBitsPerIteration;  // In the range [2, 48]
 		private boolean isDone = false;
 		
 		
@@ -313,6 +314,7 @@ public final class Open implements State {
 				literalLengthCodeTable = FIXED_LITERAL_LENGTH_CODE_TABLE;
 				distanceCodeTree  = FIXED_DISTANCE_CODE_TREE;
 				distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
+				maxBitsPerIteration = 9 + 5 + 5 + 13;
 			}
 			else {
 				// Read the current block's dynamic Huffman code tables from from the input
@@ -366,13 +368,28 @@ public final class Open implements State {
 				byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
 				literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
 				literalLengthCodeTable = codeTreeToCodeTable(literalLengthCodeTree);
+				int maxBitsPerLitLen = 0;
+				for (int sym = 0; sym < litLenCodeLen.length; sym++) {
+					int numBits = litLenCodeLen[sym];
+					if (numBits > 0 && sym >= 257)
+						numBits += RUN_LENGTH_TABLE[sym - 257] & 0x7;
+					maxBitsPerLitLen = Math.max(numBits, maxBitsPerLitLen);
+				}
 				
 				// Create distance code tree with some extra processing
 				byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
+				int maxBitsPerDist = 0;
 				if (distCodeLen.length == 1 && distCodeLen[0] == 0) {
 					distanceCodeTree = null;  // Empty distance code; the block shall be all literal symbols
 					distanceCodeTable = null;
 				} else {
+					for (int sym = 0; sym < distCodeLen.length; sym++) {
+						int numBits = distCodeLen[sym];
+						if (numBits > 0 && sym < DISTANCE_TABLE.length)
+							numBits += DISTANCE_TABLE[sym] & 0xF;
+						maxBitsPerDist = Math.max(numBits, maxBitsPerDist);
+					}
+					
 					// Get statistics for upcoming logic
 					int oneCount = 0;
 					int otherPositiveCount = 0;
@@ -392,6 +409,8 @@ public final class Open implements State {
 					distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
 					distanceCodeTable = codeTreeToCodeTable(distanceCodeTree);
 				}
+				
+				maxBitsPerIteration = maxBitsPerLitLen + maxBitsPerDist;
 			}
 		}
 		
@@ -408,7 +427,7 @@ public final class Open implements State {
 				assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
 				
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
-				if (inputBitBufferLength < 48) {
+				if (inputBitBufferLength < maxBitsPerIteration) {
 					ByteBuffer c = inputBuffer;  // Shorter name
 					int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
 					assert 0 <= numBytes && numBytes <= 8;
@@ -429,10 +448,8 @@ public final class Open implements State {
 				
 				int run, dist;
 				
-				// The worst-case number of bits consumed in one iteration:
-				//   length (symbol (15) + extra (5)) + distance (symbol (15) + extra (13)) = 48.
 				// This allows us to do decoding entirely from the bit buffer, avoiding the byte buffer or actual I/O.
-				if (inputBitBufferLength >= 48) {  // Fast path
+				if (inputBitBufferLength >= maxBitsPerIteration) {  // Fast path
 					// Decode next literal/length symbol (a customized version of decodeSymbol())
 					final int sym;
 					{
