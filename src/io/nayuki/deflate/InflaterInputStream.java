@@ -165,7 +165,7 @@ public final class InflaterInputStream extends InputStream {
 	private interface State {}
 	
 	
-	private static class Open implements State {
+	private static final class Open implements State {
 		
 		// The underlying stream to read from
 		public final InputStream input;
@@ -202,23 +202,11 @@ public final class InflaterInputStream extends InputStream {
 		
 		/* Substate */
 		
-		// The state of the decompressor:
-		//   -3: This decompressor stream has been closed. Equivalent to in == null.
-		//   -2: A data format exception has been thrown. Equivalent to exception != null.
-		//   -1: Currently processing a Huffman-compressed block.
-		//    0: Initial state, or a block just ended.
-		//   1 to 65535: Currently processing an uncompressed block, number of bytes remaining.
-		private int state;
-		
 		// Indicates whether a block header with the "bfinal" flag has been seen.
 		// This starts as false, should eventually become true, and never changes back to false.
 		private boolean isLastBlock;
 		
-		// Current code trees for when state == -1. When state != -1, both must be null.
-		private short[] literalLengthCodeTree;   // When state == -1, this must be not null
-		private short[] literalLengthCodeTable;  // Derived from literalLengthCodeTree; same nullness
-		private short[] distanceCodeTree;   // When state == -1, this can be null or not null
-		private short[] distanceCodeTable;  // Derived from distanceCodeTree; same nullness
+		private Substate substate;
 		
 		
 		public Open(InputStream in, boolean detachable, int inBufLen) {
@@ -243,12 +231,8 @@ public final class InflaterInputStream extends InputStream {
 			dictionaryIndex = 0;
 			
 			// Initialize state
-			state = 0;
+			substate = BetweenBlocks.SINGLETON;
 			isLastBlock = false;
-			literalLengthCodeTree = null;
-			literalLengthCodeTable = null;
-			distanceCodeTree = null;
-			distanceCodeTable = null;
 		}
 		
 		
@@ -264,178 +248,362 @@ public final class InflaterInputStream extends InputStream {
 			
 			while (result < len) {
 				assert !outputBuffer.hasRemaining();
-				if (state == 0) {
+				if (substate instanceof BetweenBlocks) {
 					if (isLastBlock)
 						break;
+					
 					// Read and process the block header
 					isLastBlock = readBits(1) == 1;
-					switch (readBits(2)) {  // Type
-						case 0:
-							alignInputToByte();
-							state = readBits(16);  // Block length
-							if (state != (readBits(16) ^ 0xFFFF))
-								throw new DataFormatException("len/nlen mismatch in uncompressed block");
-							break;
-						case 1:
-							state = -1;
-							literalLengthCodeTree  = FIXED_LITERAL_LENGTH_CODE_TREE;
-							literalLengthCodeTable = FIXED_LITERAL_LENGTH_CODE_TABLE;
-							distanceCodeTree  = FIXED_DISTANCE_CODE_TREE;
-							distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
-							break;
-						case 2:
-							state = -1;
-							decodeHuffmanCodes();
-							break;
-						case 3:
-							throw new DataFormatException("Reserved block type");
-						default:
-							throw new AssertionError();
-					}
-					
-				} else if (1 <= state && state <= 0xFFFF) {
-					// Read bytes from uncompressed block
-					int toRead = Math.min(state, len - result);
-					readBytes(b, off + result, toRead);
-					for (int i = 0; i < toRead; i++) {
-						dictionary[dictionaryIndex] = b[off + result];
-						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						result++;
-					}
-					state -= toRead;
-				} else if (state == -1)  // Decode symbols from Huffman-coded block
-					result += readInsideHuffmanBlock(b, off + result, len - result);
-				else
-					throw new AssertionError("Impossible state");
+					substate = switch (readBits(2)) {  // Type
+						case 0 -> new UncompressedBlock();
+						case 1 -> new HuffmanBlock(false);
+						case 2 -> new HuffmanBlock(true);
+						case 3 -> throw new DataFormatException("Reserved block type");
+						default -> throw new AssertionError("Unreachable value");
+					};
+				} else if (substate instanceof UncompressedBlock st) {
+					result += st.read(b, off + result, len - result);
+					if (st.isDone())
+						substate = BetweenBlocks.SINGLETON;
+				} else if (substate instanceof HuffmanBlock st) {
+					result += st.read(b, off + result, len - result);
+					if (st.isDone())
+						substate = BetweenBlocks.SINGLETON;
+				} else
+					throw new AssertionError("Unreachable type");
 			}
 			
-			return result > 0 || outputBuffer.hasRemaining() || state != 0 || !isLastBlock ? result : -1;
+			return result > 0 || outputBuffer.hasRemaining() || !(substate instanceof BetweenBlocks) || !isLastBlock ? result : -1;
 		}
 		
 		
-		// This method exists to split up the public read(byte[],int,int) method that is rather long.
-		// For internal use only; must only be called by read(byte[],int,int). The input array's subrange must be valid
-		// (the caller checks the preconditions). The current state must be -1. This returns a number in the range [0, len].
-		private int readInsideHuffmanBlock(byte[] b, int off, int len) throws IOException {
-			int result = 0;
-			outputBuffer.clear();
-			while (result < len) {
-				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
-				if (inputBitBufferLength < 48) {
-					ByteBuffer c = inputBuffer;  // Shorter name
-					int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
-					assert 0 <= numBytes && numBytes <= 8;
-					if (numBytes == 2) {  // Only implement special cases that occur frequently in practice
-						inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBufferLength;
-						inputBitBufferLength += 2 * 8;
-					} else if (numBytes == 3) {
-						inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBufferLength;
-						inputBitBufferLength += 3 * 8;
-					} else if (numBytes == 4) {
-						inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
-						inputBitBufferLength += 4 * 8;
-					} else {  // This slower general logic is valid for 0 <= numBytes <= 8
-						for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
-							inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
-					}
+		private interface Substate {}
+		
+		
+		private enum BetweenBlocks implements Substate { SINGLETON; }
+		
+		
+		private final class UncompressedBlock implements Substate {
+			
+			private int numRemainingBytes;
+			
+			
+			public UncompressedBlock() throws IOException {
+				alignInputToByte();
+				numRemainingBytes = readBits(16);
+				if (numRemainingBytes != (readBits(16) ^ 0xFFFF))
+					throw new DataFormatException("len/nlen mismatch in uncompressed block");
+			}
+			
+			
+			private int read(byte[] b, int off, int len) throws IOException {
+				// Check bit buffer invariants
+				if (inputBitBufferLength < 0 || inputBitBufferLength > 63
+						|| inputBitBuffer >>> inputBitBufferLength != 0)
+					throw new AssertionError("Invalid input bit buffer state");
+				
+				len = Math.min(numRemainingBytes, len);
+				int result = 0;
+				
+				// First unpack saved bits
+				for (; len > 0 && inputBitBufferLength >= 8; result++, len--) {
+					b[off + result] = (byte)inputBitBuffer;
+					inputBitBuffer >>>= 8;
+					inputBitBufferLength -= 8;
 				}
 				
-				// The worst-case number of bits consumed in one iteration:
-				//   length (symbol (15) + extra (5)) + distance (symbol (15) + extra (13)) = 48.
-				// This allows us to do decoding entirely from the bit buffer, avoiding the byte buffer or actual I/O.
-				if (inputBitBufferLength >= 48) {  // Fast path
-					// Decode next literal/length symbol (a customized version of decodeSymbol())
-					int sym;
-					{
-						int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
-						assert temp >= 0;  // No need to mask off sign extension bits
-						int consumed = temp >>> 11;
-						inputBitBuffer >>>= consumed;
-						inputBitBufferLength -= consumed;
-						int node = (temp << 21) >> 21;  // Sign extension from 11 bits
-						while (node >= 0) {
-							node = literalLengthCodeTree[node + ((int)inputBitBuffer & 1)];
-							inputBitBuffer >>>= 1;
-							inputBitBufferLength--;
+				// Read from input buffer
+				{
+					int n = Math.min(len, inputBuffer.remaining());
+					assert inputBitBufferLength == 0 || n == 0;
+					inputBuffer.get(b, off + result, n);
+					result += n;
+					len -= n;
+				}
+				
+				// Read directly from input stream (without putting into input buffer)
+				while (len > 0) {
+					assert !inputBuffer.hasRemaining();
+					int n = input.read(b, off + result, len);
+					if (n == -1)
+						throw new EOFException("Unexpected end of stream");
+					result += n;
+					len -= n;
+				}
+				
+				for (int i = 0; i < result; i++) {
+					dictionary[dictionaryIndex] = b[off + i];
+					dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+				}
+				
+				numRemainingBytes -= result;
+				return result;
+			}
+			
+			
+			public boolean isDone() {
+				return numRemainingBytes == 0;
+			}
+			
+		}
+		
+		
+		private final class HuffmanBlock implements Substate {
+			
+			private final short[] literalLengthCodeTree;   // Not null
+			private final short[] literalLengthCodeTable;  // Derived from literalLengthCodeTree; not null
+			private final short[] distanceCodeTree;   // Can be null
+			private final short[] distanceCodeTable;  // Derived from distanceCodeTree; same nullness
+			private boolean isDone = false;
+			
+			
+			public HuffmanBlock(boolean dynamic) throws IOException {
+				if (!dynamic) {
+					literalLengthCodeTree  = FIXED_LITERAL_LENGTH_CODE_TREE;
+					literalLengthCodeTable = FIXED_LITERAL_LENGTH_CODE_TABLE;
+					distanceCodeTree  = FIXED_DISTANCE_CODE_TREE;
+					distanceCodeTable = FIXED_DISTANCE_CODE_TABLE;
+				}
+				else {
+					// Reads the current block's dynamic Huffman code tables from from the input buffers/stream,
+					// processes the code lengths and computes the code trees, and ultimately sets just the variables
+					// {literalLengthCodeTree, literalLengthCodeTable, distanceCodeTree, distanceCodeTable}.
+					// This might throw an IOException for actual I/O exceptions, unexpected end of stream,
+					// or a description of an invalid Huffman code.
+					int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
+					int numDistCodes    = readBits(5) +   1;  // hdist +   1
+					
+					// Read the code length code lengths
+					int numCodeLenCodes = readBits(4) +   4;  // hclen +   4
+					byte[] codeLenCodeLen = new byte[19];  // This array is filled in a strange order
+					for (int i = 0; i < numCodeLenCodes; i++)
+						codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
+					short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
+					
+					// Read the main code lengths and handle runs
+					byte[] codeLens = new byte[numLitLenCodes + numDistCodes];
+					byte runVal = -1;
+					int runLen = 0;
+					for (int i = 0; i < codeLens.length; ) {
+						if (runLen > 0) {
+							assert runVal != -1;
+							codeLens[i] = runVal;
+							runLen--;
+							i++;
+						} else {
+							int sym = decodeSymbol(codeLenCodeTree);
+							assert 0 <= sym && sym <= 18;
+							if (sym < 16) {
+								runVal = codeLens[i] = (byte)sym;
+								i++;
+							} else if (sym == 16) {
+								if (runVal == -1)
+									throw new DataFormatException("No code length value to copy");
+								runLen = readBits(2) + 3;
+							} else if (sym == 17) {
+								runVal = 0;
+								runLen = readBits(3) + 3;
+							} else {  // sym == 18
+								runVal = 0;
+								runLen = readBits(7) + 11;
+							}
 						}
-						sym = ~node;
+					}
+					if (runLen > 0)
+						throw new DataFormatException("Run exceeds number of codes");
+					
+					// Create literal-length code tree
+					byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
+					literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
+					literalLengthCodeTable = codeTreeToCodeTable(literalLengthCodeTree);
+					
+					// Create distance code tree with some extra processing
+					byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
+					if (distCodeLen.length == 1 && distCodeLen[0] == 0) {
+						distanceCodeTree = null;  // Empty distance code; the block shall be all literal symbols
+						distanceCodeTable = null;
+					} else {
+						// Get statistics for upcoming logic
+						int oneCount = 0;
+						int otherPositiveCount = 0;
+						for (byte x : distCodeLen) {
+							if (x == 1)
+								oneCount++;
+							else if (x > 1)
+								otherPositiveCount++;
+						}
+						
+						// Handle the case where only one distance code is defined
+						if (oneCount == 1 && otherPositiveCount == 0) {
+							// Add a dummy invalid code to make the Huffman tree complete
+							distCodeLen = Arrays.copyOf(distCodeLen, 32);
+							distCodeLen[31] = 1;
+						}
+						distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
+						distanceCodeTable = codeTreeToCodeTable(distanceCodeTree);
+					}
+				}
+			}
+			
+			
+			public int read(byte[] b, int off, int len) throws IOException {
+				int result = 0;
+				outputBuffer.clear();
+				while (result < len) {
+					// Try to fill the input bit buffer (somewhat similar to logic in readBits())
+					if (inputBitBufferLength < 48) {
+						ByteBuffer c = inputBuffer;  // Shorter name
+						int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
+						assert 0 <= numBytes && numBytes <= 8;
+						if (numBytes == 2) {  // Only implement special cases that occur frequently in practice
+							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBufferLength;
+							inputBitBufferLength += 2 * 8;
+						} else if (numBytes == 3) {
+							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBufferLength;
+							inputBitBufferLength += 3 * 8;
+						} else if (numBytes == 4) {
+							inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
+							inputBitBufferLength += 4 * 8;
+						} else {  // This slower general logic is valid for 0 <= numBytes <= 8
+							for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
+								inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
+						}
 					}
 					
-					// Handle the symbol by ranges
-					assert 0 <= sym && sym <= 287;
-					if (sym < 256) {  // Literal byte
-						b[off + result] = (byte)sym;
-						dictionary[dictionaryIndex] = (byte)sym;
-						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						result++;
-						
-					} else if (sym > 256) {  // Length and distance for copying
-						// Decode the run length (a customized version of decodeRunLength())
-						assert 257 <= sym && sym <= 287;
-						if (sym > 285)
-							throw new DataFormatException("Reserved run length symbol: " + sym);
-						int run;
+					// The worst-case number of bits consumed in one iteration:
+					//   length (symbol (15) + extra (5)) + distance (symbol (15) + extra (13)) = 48.
+					// This allows us to do decoding entirely from the bit buffer, avoiding the byte buffer or actual I/O.
+					if (inputBitBufferLength >= 48) {  // Fast path
+						// Decode next literal/length symbol (a customized version of decodeSymbol())
+						int sym;
 						{
-							int temp = RUN_LENGTH_TABLE[sym - 257];
-							run = temp >>> 3;
-							int numExtraBits = temp & 7;
-							run += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
-							inputBitBuffer >>>= numExtraBits;
-							inputBitBufferLength -= numExtraBits;
-						}
-						assert 3 <= run && run <= 258;
-						
-						// Decode next distance symbol (a customized version of decodeSymbol())
-						if (distanceCodeTree == null)
-							throw new DataFormatException("Length symbol encountered with empty distance code");
-						int distSym;
-						{
-							int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+							int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
 							assert temp >= 0;  // No need to mask off sign extension bits
 							int consumed = temp >>> 11;
 							inputBitBuffer >>>= consumed;
 							inputBitBufferLength -= consumed;
 							int node = (temp << 21) >> 21;  // Sign extension from 11 bits
-							while (node >= 0) {  // Medium path
-								node = distanceCodeTree[node + ((int)inputBitBuffer & 1)];
+							while (node >= 0) {
+								node = literalLengthCodeTree[node + ((int)inputBitBuffer & 1)];
 								inputBitBuffer >>>= 1;
 								inputBitBufferLength--;
 							}
-							distSym = ~node;
+							sym = ~node;
 						}
-						assert 0 <= distSym && distSym <= 31;
 						
-						// Decode the distance (a customized version of decodeDistance())
-						if (distSym > 29)
-							throw new DataFormatException("Reserved distance symbol: " + distSym);
-						int dist;
-						{
-							int temp = DISTANCE_TABLE[distSym];
-							dist = temp >>> 4;
-							int numExtraBits = temp & 0xF;
-							dist += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
-							inputBitBuffer >>>= numExtraBits;
-							inputBitBufferLength -= numExtraBits;
-						}
-						assert 1 <= dist && dist <= 32768;
-						assert inputBitBufferLength >= 0;
-						
-						// Copy bytes to output and dictionary
-						int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-						if (len - result >= run) {  // Nice case with less branching
-							for (int i = 0; i < run; i++) {
-								byte bb = dictionary[dictReadIndex];
-								dictionary[dictionaryIndex] = bb;
-								b[off + result] = bb;
-								dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-								dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-								result++;
+						// Handle the symbol by ranges
+						assert 0 <= sym && sym <= 287;
+						if (sym < 256) {  // Literal byte
+							b[off + result] = (byte)sym;
+							dictionary[dictionaryIndex] = (byte)sym;
+							dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+							result++;
+							
+						} else if (sym > 256) {  // Length and distance for copying
+							// Decode the run length (a customized version of decodeRunLength())
+							assert 257 <= sym && sym <= 287;
+							if (sym > 285)
+								throw new DataFormatException("Reserved run length symbol: " + sym);
+							int run;
+							{
+								int temp = RUN_LENGTH_TABLE[sym - 257];
+								run = temp >>> 3;
+								int numExtraBits = temp & 7;
+								run += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
+								inputBitBuffer >>>= numExtraBits;
+								inputBitBufferLength -= numExtraBits;
 							}
-						} else {  // General case
+							assert 3 <= run && run <= 258;
+							
+							// Decode next distance symbol (a customized version of decodeSymbol())
+							if (distanceCodeTree == null)
+								throw new DataFormatException("Length symbol encountered with empty distance code");
+							int distSym;
+							{
+								int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+								assert temp >= 0;  // No need to mask off sign extension bits
+								int consumed = temp >>> 11;
+								inputBitBuffer >>>= consumed;
+								inputBitBufferLength -= consumed;
+								int node = (temp << 21) >> 21;  // Sign extension from 11 bits
+								while (node >= 0) {  // Medium path
+									node = distanceCodeTree[node + ((int)inputBitBuffer & 1)];
+									inputBitBuffer >>>= 1;
+									inputBitBufferLength--;
+								}
+								distSym = ~node;
+							}
+							assert 0 <= distSym && distSym <= 31;
+							
+							// Decode the distance (a customized version of decodeDistance())
+							if (distSym > 29)
+								throw new DataFormatException("Reserved distance symbol: " + distSym);
+							int dist;
+							{
+								int temp = DISTANCE_TABLE[distSym];
+								dist = temp >>> 4;
+								int numExtraBits = temp & 0xF;
+								dist += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
+								inputBitBuffer >>>= numExtraBits;
+								inputBitBufferLength -= numExtraBits;
+							}
+							assert 1 <= dist && dist <= 32768;
+							assert inputBitBufferLength >= 0;
+							
+							// Copy bytes to output and dictionary
+							int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
+							if (len - result >= run) {  // Nice case with less branching
+								for (int i = 0; i < run; i++) {
+									byte bb = dictionary[dictReadIndex];
+									dictionary[dictionaryIndex] = bb;
+									b[off + result] = bb;
+									dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+									dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+									result++;
+								}
+							} else {  // General case
+								for (int i = 0; i < run; i++) {
+									byte bb = dictionary[dictReadIndex];
+									dictionary[dictionaryIndex] = bb;
+									dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+									dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+									if (result < len) {
+										b[off + result] = bb;
+										result++;
+									} else
+										outputBuffer.put(bb);
+								}
+							}
+							
+						} else {  // sym == 256, end of block
+							isDone = true;
+							break;
+						}
+						
+					} else {  // General case (always correct), when not enough bits in buffer to guarantee reading
+						int sym = decodeSymbol(literalLengthCodeTree);
+						assert 0 <= sym && sym <= 287;
+						if (sym < 256) {  // Literal byte
+							b[off + result] = (byte)sym;
+							dictionary[dictionaryIndex] = (byte)sym;
+							dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+							result++;
+						} else if (sym > 256) {  // Length and distance for copying
+							int run = decodeRunLength(sym);
+							assert 3 <= run && run <= 258;
+							if (distanceCodeTree == null)
+								throw new DataFormatException("Length symbol encountered with empty distance code");
+							int distSym = decodeSymbol(distanceCodeTree);
+							assert 0 <= distSym && distSym <= 31;
+							int dist = decodeDistance(distSym);
+							assert 1 <= dist && dist <= 32768;
+							
+							// Copy bytes to output and dictionary
+							int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
 							for (int i = 0; i < run; i++) {
 								byte bb = dictionary[dictReadIndex];
-								dictionary[dictionaryIndex] = bb;
 								dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+								dictionary[dictionaryIndex] = bb;
 								dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 								if (result < len) {
 									b[off + result] = bb;
@@ -443,142 +611,74 @@ public final class InflaterInputStream extends InputStream {
 								} else
 									outputBuffer.put(bb);
 							}
+						} else {  // sym == 256, end of block
+							isDone = true;
+							break;
 						}
-						
-					} else {  // sym == 256, end of block
-						literalLengthCodeTree = null;
-						literalLengthCodeTable = null;
-						distanceCodeTree = null;
-						distanceCodeTable = null;
-						state = 0;
-						break;
-					}
-					
-				} else {  // General case (always correct), when not enough bits in buffer to guarantee reading
-					int sym = decodeSymbol(literalLengthCodeTree);
-					assert 0 <= sym && sym <= 287;
-					if (sym < 256) {  // Literal byte
-						b[off + result] = (byte)sym;
-						dictionary[dictionaryIndex] = (byte)sym;
-						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						result++;
-					} else if (sym > 256) {  // Length and distance for copying
-						int run = decodeRunLength(sym);
-						assert 3 <= run && run <= 258;
-						if (distanceCodeTree == null)
-							throw new DataFormatException("Length symbol encountered with empty distance code");
-						int distSym = decodeSymbol(distanceCodeTree);
-						assert 0 <= distSym && distSym <= 31;
-						int dist = decodeDistance(distSym);
-						assert 1 <= dist && dist <= 32768;
-						
-						// Copy bytes to output and dictionary
-						int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-						for (int i = 0; i < run; i++) {
-							byte bb = dictionary[dictReadIndex];
-							dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-							dictionary[dictionaryIndex] = bb;
-							dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-							if (result < len) {
-								b[off + result] = bb;
-								result++;
-							} else
-								outputBuffer.put(bb);
-						}
-					} else {  // sym == 256, end of block
-						literalLengthCodeTree = null;
-						literalLengthCodeTable = null;
-						distanceCodeTree = null;
-						distanceCodeTable = null;
-						state = 0;
-						break;
 					}
 				}
+				outputBuffer.flip();
+				return result;
 			}
-			outputBuffer.flip();
-			return result;
-		}
-		
-		
-		/*---- Huffman coding methods ----*/
-		
-		// Reads the current block's dynamic Huffman code tables from from the input buffers/stream,
-		// processes the code lengths and computes the code trees, and ultimately sets just the variables
-		// {literalLengthCodeTree, literalLengthCodeTable, distanceCodeTree, distanceCodeTable}.
-		// This might throw an IOException for actual I/O exceptions, unexpected end of stream,
-		// or a description of an invalid Huffman code.
-		private void decodeHuffmanCodes() throws IOException {
-			int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
-			int numDistCodes    = readBits(5) +   1;  // hdist +   1
 			
-			// Read the code length code lengths
-			int numCodeLenCodes = readBits(4) +   4;  // hclen +   4
-			byte[] codeLenCodeLen = new byte[19];  // This array is filled in a strange order
-			for (int i = 0; i < numCodeLenCodes; i++)
-				codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
-			short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
 			
-			// Read the main code lengths and handle runs
-			byte[] codeLens = new byte[numLitLenCodes + numDistCodes];
-			byte runVal = -1;
-			int runLen = 0;
-			for (int i = 0; i < codeLens.length; ) {
-				if (runLen > 0) {
-					assert runVal != -1;
-					codeLens[i] = runVal;
-					runLen--;
-					i++;
-				} else {
-					int sym = decodeSymbol(codeLenCodeTree);
-					assert 0 <= sym && sym <= 18;
-					if (sym < 16) {
-						runVal = codeLens[i] = (byte)sym;
-						i++;
-					} else if (sym == 16) {
-						if (runVal == -1)
-							throw new DataFormatException("No code length value to copy");
-						runLen = readBits(2) + 3;
-					} else if (sym == 17) {
-						runVal = 0;
-						runLen = readBits(3) + 3;
-					} else {  // sym == 18
-						runVal = 0;
-						runLen = readBits(7) + 11;
-					}
+			public boolean isDone() {
+				return isDone;
+			}
+			
+			
+			/*---- Huffman coding methods ----*/
+			
+			// Reads bits from the input buffers/stream and uses the given code tree to decode the next symbol.
+			// The returned symbol value is a non-negative integer. This throws an IOException if the end of stream
+			// is reached before a symbol is decoded, or if the underlying stream experiences an I/O exception.
+			private int decodeSymbol(short[] codeTree) throws IOException {
+				int node = 0;  // An index into the codeTree array which signifies the current tree node
+				while (node >= 0) {
+					if (inputBitBufferLength > 0) {  // Medium path using buffered bits
+						node = codeTree[node + ((int)inputBitBuffer & 1)];
+						inputBitBuffer >>>= 1;
+					inputBitBufferLength--;
+					} else  // Slow path with potential I/O operations
+						node = codeTree[node + readBits(1)];
+				}
+				return ~node;  // Symbol was encoded as bitwise complement
+			}
+			
+			
+			// Takes the given run length symbol in the range [257, 287], possibly reads some more input bits,
+			// and returns a number in the range [3, 258]. This throws an IOException if bits needed to be read
+			// but the end of stream was reached or the underlying stream experienced an I/O exception.
+			private int decodeRunLength(int sym) throws IOException {
+				assert 257 <= sym && sym <= 287;
+				if (sym <= 264)
+					return sym - 254;
+				else if (sym <= 284) {
+					int numExtraBits = (sym - 261) >>> 2;
+				return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
+				} else if (sym == 285)
+					return 258;
+				else {  // sym is 286 or 287
+					throw new DataFormatException("Reserved run length symbol: " + sym);
 				}
 			}
-			if (runLen > 0)
-				throw new DataFormatException("Run exceeds number of codes");
 			
-			// Create literal-length code tree
-			byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
-			literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
-			literalLengthCodeTable = codeTreeToCodeTable(literalLengthCodeTree);
 			
-			// Create distance code tree with some extra processing
-			byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
-			if (distCodeLen.length == 1 && distCodeLen[0] == 0)
-				distanceCodeTree = null;  // Empty distance code; the block shall be all literal symbols
-			else {
-				// Get statistics for upcoming logic
-				int oneCount = 0;
-				int otherPositiveCount = 0;
-				for (byte x : distCodeLen) {
-					if (x == 1)
-						oneCount++;
-					else if (x > 1)
-						otherPositiveCount++;
+			// Takes the given run length symbol in the range [0, 31], possibly reads some more input bits,
+			// and returns a number in the range [1, 32768]. This throws an IOException if bits needed to
+			// be read but the end of stream was reached or the underlying stream experienced an I/O exception.
+			private int decodeDistance(int sym) throws IOException {
+				assert 0 <= sym && sym <= 31;
+				if (sym <= 3)
+					return sym + 1;
+				else if (sym <= 29) {
+					int numExtraBits = (sym >>> 1) - 1;
+					return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
+				} else {  // sym is 30 or 31
+					throw new DataFormatException("Reserved distance symbol: " + sym);
 				}
-				
-				// Handle the case where only one distance code is defined
-				if (oneCount == 1 && otherPositiveCount == 0) {
-					// Add a dummy invalid code to make the Huffman tree complete
-					distCodeLen = Arrays.copyOf(distCodeLen, 32);
-					distCodeLen[31] = 1;
-				}
-				distanceCodeTree = codeLengthsToCodeTree(distCodeLen);
-				distanceCodeTable = codeTreeToCodeTable(distanceCodeTree);
 			}
+			
 		}
 		
 		
@@ -703,57 +803,6 @@ public final class InflaterInputStream extends InputStream {
 		}
 		
 		
-		// Reads bits from the input buffers/stream and uses the given code tree to decode the next symbol.
-		// The returned symbol value is a non-negative integer. This throws an IOException if the end of stream
-		// is reached before a symbol is decoded, or if the underlying stream experiences an I/O exception.
-		private int decodeSymbol(short[] codeTree) throws IOException {
-			int node = 0;  // An index into the codeTree array which signifies the current tree node
-			while (node >= 0) {
-				if (inputBitBufferLength > 0) {  // Medium path using buffered bits
-					node = codeTree[node + ((int)inputBitBuffer & 1)];
-					inputBitBuffer >>>= 1;
-					inputBitBufferLength--;
-				} else  // Slow path with potential I/O operations
-					node = codeTree[node + readBits(1)];
-			}
-			return ~node;  // Symbol was encoded as bitwise complement
-		}
-		
-		
-		// Takes the given run length symbol in the range [257, 287], possibly reads some more input bits,
-		// and returns a number in the range [3, 258]. This throws an IOException if bits needed to be read
-		// but the end of stream was reached or the underlying stream experienced an I/O exception.
-		private int decodeRunLength(int sym) throws IOException {
-			assert 257 <= sym && sym <= 287;
-			if (sym <= 264)
-				return sym - 254;
-			else if (sym <= 284) {
-				int numExtraBits = (sym - 261) >>> 2;
-				return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
-			} else if (sym == 285)
-				return 258;
-			else {  // sym is 286 or 287
-				throw new DataFormatException("Reserved run length symbol: " + sym);
-			}
-		}
-		
-		
-		// Takes the given run length symbol in the range [0, 31], possibly reads some more input bits,
-		// and returns a number in the range [1, 32768]. This throws an IOException if bits needed to
-		// be read but the end of stream was reached or the underlying stream experienced an I/O exception.
-		private int decodeDistance(int sym) throws IOException {
-			assert 0 <= sym && sym <= 31;
-			if (sym <= 3)
-				return sym + 1;
-			else if (sym <= 29) {
-				int numExtraBits = (sym >>> 1) - 1;
-				return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
-			} else {  // sym is 30 or 31
-				throw new DataFormatException("Reserved distance symbol: " + sym);
-			}
-		}
-		
-		
 		/*---- I/O methods ----*/
 		
 		// Returns the given number of least significant bits from the bit buffer.
@@ -791,50 +840,10 @@ public final class InflaterInputStream extends InputStream {
 		}
 		
 		
-		// Reads exactly 'len' bytes from {the input buffers or underlying input stream} into the
-		// given array subrange. This method alters the input buffer states, may throw an IOException,
-		// and would destroy the decompressor state if EOF occurs before the read length is satisfied.
-		private void readBytes(byte[] b, int off, int len) throws IOException {
-			// Check bit buffer invariants
-			if (inputBitBufferLength < 0 || inputBitBufferLength > 63
-					|| inputBitBuffer >>> inputBitBufferLength != 0)
-				throw new AssertionError("Invalid input bit buffer state");
-			
-			// First unpack saved bits
-			alignInputToByte();
-			for (; len > 0 && inputBitBufferLength >= 8; off++, len--) {
-				b[off] = (byte)inputBitBuffer;
-				inputBitBuffer >>>= 8;
-				inputBitBufferLength -= 8;
-			}
-			
-			// Read from input buffer
-			{
-				int n = Math.min(len, inputBuffer.remaining());
-				assert inputBitBufferLength == 0 || n == 0;
-				inputBuffer.get(b, off, n);
-				off += n;
-				len -= n;
-			}
-			
-			// Read directly from input stream (without putting into input buffer)
-			while (len > 0) {
-				assert !inputBuffer.hasRemaining();
-				int n = input.read(b, off, len);
-				if (n == -1)
-					throw new EOFException("Unexpected end of stream");
-				off += n;
-				len -= n;
-			}
-		}
-		
-		
 		// Fills the input byte buffer with new data read from the underlying input stream.
 		// Requires the buffer to be fully consumed before being called. This method sets
 		// inputBufferLength to a value in the range [-1, inputBuffer.length] and inputBufferIndex to 0.
 		private void fillInputBuffer() throws IOException {
-			if (state < -1)
-				throw new AssertionError("Must not read in this state");
 			if (inputBuffer.hasRemaining())
 				throw new AssertionError("Input buffer not fully consumed yet");
 			
