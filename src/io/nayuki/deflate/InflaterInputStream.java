@@ -30,6 +30,18 @@ public final class InflaterInputStream extends InputStream {
 	/*---- Constructors ----*/
 	
 	/**
+	 * Constructs an inflater input stream over the specified underlying input stream. The
+	 * underlying stream must contain DEFLATE-compressed data with no headers or footers (e.g. must
+	 * be unwrapped from the zlib or gzip container formats). {@code detach()} cannot be called.
+	 * @param in the underlying input stream of raw DEFLATE-compressed data
+	 * @throws NullPointerException if the input stream is {@code null}
+	 */
+	public InflaterInputStream(InputStream in) {
+		this(in, false);
+	}
+	
+	
+	/**
 	 * Constructs an inflater input stream over the specified underlying input stream, and with the
 	 * specified option for detachability. The underlying stream must contain DEFLATE-compressed data with
 	 * no headers or footers (e.g. must be unwrapped from the zlib or gzip container formats). Detachability
