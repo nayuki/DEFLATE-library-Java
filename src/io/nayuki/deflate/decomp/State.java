@@ -9,4 +9,4 @@
 package io.nayuki.deflate.decomp;
 
 
-public interface State {}
+public sealed interface State permits Open, StickyException, Closed {}
