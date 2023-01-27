@@ -435,6 +435,14 @@ public final class Open implements State {
 							inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
 							inputBitBufferLength += 4 * 8;
 							break;
+						case 5:
+							inputBitBuffer |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32) << inputBitBufferLength;
+							inputBitBufferLength += 5 * 8;
+							break;
+						case 6:
+							inputBitBuffer |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32 | (c.get()&0xFFL)<<40) << inputBitBufferLength;
+							inputBitBufferLength += 6 * 8;
+							break;
 						default:  // This slower general logic is valid for 0 <= numBytes <= 8
 							for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
 								inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
