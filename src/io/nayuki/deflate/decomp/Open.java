@@ -32,15 +32,15 @@ public final class Open implements State {
 	private ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
 	
 	// Buffer of bits packed from the bytes in `inputBuffer`
-	private long inputBitBuffer;       // Always in the range [0, 2^inputBitBufferLength)
-	private int inputBitBufferLength;  // Always in the range [0, 63]
+	private long inputBitBuffer = 0;       // Always in the range [0, 2^inputBitBufferLength)
+	private int inputBitBufferLength = 0;  // Always in the range [0, 63]
 	
 	// Queued bytes to yield first when this.read() is called
-	private int numPendingOutputBytes;  // Always in the range [0, 257]
+	private int numPendingOutputBytes = 0;  // Always in the range [0, 257]
 	
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
-	private byte[] dictionary;
-	private int dictionaryIndex;
+	private byte[] dictionary = new byte[DICTIONARY_LENGTH];
+	private int dictionaryIndex = 0;
 	
 	// The typical data flow in this decompressor looks like:
 	//   input (the underlying input stream) -> input.read()
@@ -56,26 +56,15 @@ public final class Open implements State {
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	// This starts as false, should eventually become true, and never changes back to false.
-	private boolean isLastBlock;
+	private boolean isLastBlock = false;
 	
-	private Substate substate;
+	private Substate substate = BetweenBlocks.SINGLETON;
 	
 	
 	public Open(InputStream in, boolean detachable, int inBufLen) {
 		input = in;
 		isDetachable = detachable;
-		
-		// Initialize data buffers
 		inputBuffer = ByteBuffer.allocate(inBufLen).position(0).limit(0);
-		inputBitBuffer = 0;
-		inputBitBufferLength = 0;
-		numPendingOutputBytes = 0;
-		dictionary = new byte[DICTIONARY_LENGTH];
-		dictionaryIndex = 0;
-		
-		// Initialize state
-		substate = BetweenBlocks.SINGLETON;
-		isLastBlock = false;
 	}
 	
 	
