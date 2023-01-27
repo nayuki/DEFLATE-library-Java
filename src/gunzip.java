@@ -113,8 +113,7 @@ public final class gunzip {
 					System.err.println("Flag: Text");
 				if (flags.get(2)) {
 					System.err.println("Flag: Extra");
-					int len = readLittleEndianUint16(din);
-					din.readFully(new byte[len]);  // Skip extra data
+					din.skipNBytes(readLittleEndianUint16(din));
 				}
 				if (flags.get(3))
 					System.err.println("File name: " + readNullTerminatedString(din));
