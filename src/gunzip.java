@@ -79,8 +79,8 @@ public final class gunzip {
 				// Extra flags
 				int extraFlags = din.readUnsignedByte();
 				System.err.println("Extra flags: " + switch (extraFlags) {
-					case 2 -> "Maximum compression";
-					case 4 -> "Fastest compression";
+					case 2  -> "Maximum compression";
+					case 4  -> "Fastest compression";
 					default -> "Unknown (" + extraFlags + ")";
 				});
 				
