@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Objects;
 import io.nayuki.deflate.DataFormatException;
 
 
@@ -62,17 +61,8 @@ public final class Open implements State {
 	
 	
 	public Open(InputStream in, boolean detachable, int inBufLen) {
-		// Handle the input stream and detachability
-		input = Objects.requireNonNull(in);
-		if (inBufLen <= 0)
-			throw new IllegalArgumentException("Input buffer size must be positive");
+		input = in;
 		isDetachable = detachable;
-		if (detachable) {
-			if (in.markSupported())
-				in.mark(0);
-			else
-				throw new IllegalArgumentException("Input stream not markable, cannot support detachment");
-		}
 		
 		// Initialize data buffers
 		inputBuffer = ByteBuffer.allocate(inBufLen).position(0).limit(0);

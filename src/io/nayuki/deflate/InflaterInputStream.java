@@ -73,6 +73,14 @@ public final class InflaterInputStream extends InputStream {
 	 * @throws IllegalArgumentException if {@code detach == true} but {@code in.markSupported() == false}
 	 */
 	public InflaterInputStream(InputStream in, boolean detachable, int inBufLen) {
+		Objects.requireNonNull(in);
+		if (inBufLen <= 0)
+			throw new IllegalArgumentException("Non-positive input buffer size");
+		if (detachable) {
+			if (!in.markSupported())
+				throw new IllegalArgumentException("Input stream not markable, cannot support detachment");
+			in.mark(0);
+		}
 		state = new Open(in, detachable, inBufLen);
 	}
 	
