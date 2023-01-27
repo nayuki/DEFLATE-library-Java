@@ -399,8 +399,12 @@ public final class Open implements State {
 		public int read(byte[] b, final int off, final int len) throws IOException {
 			if (numPendingOutputBytes != 0)
 				throw new AssertionError("Unreachable state");
-			int result = 0;
-			while (result < len) {
+			
+			int index = off;
+			final int end = off + len;
+			assert off <= end && end <= b.length;
+			
+			while (index < end) {
 				assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
 				
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
@@ -449,10 +453,10 @@ public final class Open implements State {
 					// Handle the symbol by ranges
 					assert 0 <= sym && sym <= 287;
 					if (sym < 256) {  // Literal byte
-						b[off + result] = (byte)sym;
+						b[index] = (byte)sym;
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						result++;
+						index++;
 						continue;
 						
 					} else if (sym > 256) {  // Length and distance for copying
@@ -510,10 +514,10 @@ public final class Open implements State {
 					int sym = decodeSymbol(literalLengthCodeTree);
 					assert 0 <= sym && sym <= 287;
 					if (sym < 256) {  // Literal byte
-						b[off + result] = (byte)sym;
+						b[index] = (byte)sym;
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						result++;
+						index++;
 						continue;
 					} else if (sym > 256) {  // Length and distance for copying
 						run = decodeRunLength(sym);
@@ -532,14 +536,14 @@ public final class Open implements State {
 				assert 3 <= run && run <= 258;
 				assert 1 <= dist && dist <= 32768;
 				int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-				if (len - result >= run) {  // Nice case with less branching
+				if (end - index >= run) {  // Nice case with less branching
 					for (int i = 0; i < run; i++) {
 						byte bb = dictionary[dictReadIndex];
 						dictionary[dictionaryIndex] = bb;
-						b[off + result] = bb;
+						b[index] = bb;
 						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						result++;
+						index++;
 					}
 				} else {  // General case
 					for (int i = 0; i < run; i++) {
@@ -547,15 +551,15 @@ public final class Open implements State {
 						dictionary[dictionaryIndex] = bb;
 						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						if (result < len) {
-							b[off + result] = bb;
-							result++;
+						if (index < end) {
+							b[index] = bb;
+							index++;
 						} else
 							numPendingOutputBytes++;
 					}
 				}
 			}
-			return result;
+			return index - off;
 		}
 		
 		
