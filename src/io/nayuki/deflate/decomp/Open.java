@@ -56,9 +56,6 @@ public final class Open implements State {
 	private byte[] dictionary = new byte[DICTIONARY_LENGTH];
 	private int dictionaryIndex = 0;
 	
-	// Queued bytes to yield first when this.read() is called
-	private int numPendingOutputBytes = 0;  // Always in the range [0, 257]
-	
 	
 	
 	/*---- Constructor ----*/
@@ -76,20 +73,7 @@ public final class Open implements State {
 	public int read(byte[] b, int off, int len) throws IOException {
 		int result = 0;  // Number of bytes filled in the array `b`
 		
-		// First move bytes (if any) from the output buffer
-		if (numPendingOutputBytes > 0) {
-			int n = Math.min(numPendingOutputBytes, len);
-			int dictIndex = (dictionaryIndex - numPendingOutputBytes) & DICTIONARY_MASK;
-			for (; result < n; result++) {
-				b[off + result] = dictionary[dictIndex];
-				dictIndex = (dictIndex + 1) & DICTIONARY_MASK;
-			}
-			numPendingOutputBytes -= n;
-			len -= n;
-		}
-		
 		while (result < len) {
-			assert numPendingOutputBytes == 0;
 			if (substate instanceof BetweenBlocks) {
 				if (isLastBlock)
 					break;
@@ -115,7 +99,7 @@ public final class Open implements State {
 				throw new AssertionError("Unreachable type");
 		}
 		
-		return result > 0 || numPendingOutputBytes > 0 || !(substate instanceof BetweenBlocks) || !isLastBlock ? result : -1;
+		return result > 0 || !(substate instanceof BetweenBlocks) || !isLastBlock ? result : -1;
 	}
 	
 	
@@ -305,6 +289,8 @@ public final class Open implements State {
 		private final short[] distanceCodeTree;   // Can be null
 		private final short[] distanceCodeTable;  // Derived from distanceCodeTree; same nullness
 		private final int maxBitsPerIteration;  // In the range [2, 48]
+		
+		private int numPendingOutputBytes = 0;  // Always in the range [0, 256]
 		private boolean isDone = false;
 		
 		
@@ -416,12 +402,15 @@ public final class Open implements State {
 		
 		
 		public int read(byte[] b, final int off, final int len) throws IOException {
-			if (numPendingOutputBytes != 0)
-				throw new AssertionError("Unreachable state");
-			
 			int index = off;
 			final int end = off + len;
 			assert off <= end && end <= b.length;
+			
+			for (; numPendingOutputBytes > 0; numPendingOutputBytes--, index++) {
+				if (index >= end)
+					return index - off;
+				b[index] = dictionary[(dictionaryIndex - numPendingOutputBytes) & DICTIONARY_MASK];
+			}
 			
 			while (index < end) {
 				assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
