@@ -40,8 +40,11 @@ public final class InflaterInputStream extends InputStream {
 	 * @throws IllegalArgumentException if {@code detach == true} but {@code in.markSupported() == false}
 	 */
 	public InflaterInputStream(InputStream in, boolean detachable) {
-		this(in, detachable, 16 * 1024);  // Use a reasonable default input buffer size
+		this(in, detachable, DEFAULT_INPUT_BUFFER_SIZE);
 	}
+	
+	
+	private static final int DEFAULT_INPUT_BUFFER_SIZE = 16 * 1024;
 	
 	
 	/**
