@@ -417,6 +417,8 @@ public final class Open implements State {
 					}
 				}
 				
+				int run, dist;
+				
 				// The worst-case number of bits consumed in one iteration:
 				//   length (symbol (15) + extra (5)) + distance (symbol (15) + extra (13)) = 48.
 				// This allows us to do decoding entirely from the bit buffer, avoiding the byte buffer or actual I/O.
@@ -445,13 +447,13 @@ public final class Open implements State {
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 						result++;
+						continue;
 						
 					} else if (sym > 256) {  // Length and distance for copying
 						// Decode the run length (a customized version of decodeRunLength())
 						assert 257 <= sym && sym <= 287;
 						if (sym > 285)
 							throw new DataFormatException("Reserved run length symbol: " + sym);
-						int run;
 						{
 							int temp = RUN_LENGTH_TABLE[sym - 257];
 							run = temp >>> 3;
@@ -460,7 +462,6 @@ public final class Open implements State {
 							inputBitBuffer >>>= numExtraBits;
 							inputBitBufferLength -= numExtraBits;
 						}
-						assert 3 <= run && run <= 258;
 						
 						// Decode next distance symbol (a customized version of decodeSymbol())
 						if (distanceCodeTree == null)
@@ -485,7 +486,6 @@ public final class Open implements State {
 						// Decode the distance (a customized version of decodeDistance())
 						if (distSym > 29)
 							throw new DataFormatException("Reserved distance symbol: " + distSym);
-						int dist;
 						{
 							int temp = DISTANCE_TABLE[distSym];
 							dist = temp >>> 4;
@@ -494,33 +494,7 @@ public final class Open implements State {
 							inputBitBuffer >>>= numExtraBits;
 							inputBitBufferLength -= numExtraBits;
 						}
-						assert 1 <= dist && dist <= 32768;
 						assert inputBitBufferLength >= 0;
-						
-						// Copy bytes to output and dictionary
-						int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-						if (len - result >= run) {  // Nice case with less branching
-							for (int i = 0; i < run; i++) {
-								byte bb = dictionary[dictReadIndex];
-								dictionary[dictionaryIndex] = bb;
-								b[off + result] = bb;
-								dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-								dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-								result++;
-							}
-						} else {  // General case
-							for (int i = 0; i < run; i++) {
-								byte bb = dictionary[dictReadIndex];
-								dictionary[dictionaryIndex] = bb;
-								dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-								dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-								if (result < len) {
-									b[off + result] = bb;
-									result++;
-								} else
-									numPendingOutputBytes++;
-							}
-						}
 						
 					} else {  // sym == 256, end of block
 						isDone = true;
@@ -535,32 +509,44 @@ public final class Open implements State {
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 						result++;
+						continue;
 					} else if (sym > 256) {  // Length and distance for copying
-						int run = decodeRunLength(sym);
-						assert 3 <= run && run <= 258;
+						run = decodeRunLength(sym);
 						if (distanceCodeTree == null)
 							throw new DataFormatException("Length symbol encountered with empty distance code");
 						int distSym = decodeSymbol(distanceCodeTree);
 						assert 0 <= distSym && distSym <= 31;
-						int dist = decodeDistance(distSym);
-						assert 1 <= dist && dist <= 32768;
-						
-						// Copy bytes to output and dictionary
-						int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-						for (int i = 0; i < run; i++) {
-							byte bb = dictionary[dictReadIndex];
-							dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
-							dictionary[dictionaryIndex] = bb;
-							dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-							if (result < len) {
-								b[off + result] = bb;
-								result++;
-							} else
-								numPendingOutputBytes++;
-						}
+						dist = decodeDistance(distSym);
 					} else {  // sym == 256, end of block
 						isDone = true;
 						break;
+					}
+				}
+				
+				// Copy bytes to output and dictionary
+				assert 3 <= run && run <= 258;
+				assert 1 <= dist && dist <= 32768;
+				int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
+				if (len - result >= run) {  // Nice case with less branching
+					for (int i = 0; i < run; i++) {
+						byte bb = dictionary[dictReadIndex];
+						dictionary[dictionaryIndex] = bb;
+						b[off + result] = bb;
+						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						result++;
+					}
+				} else {  // General case
+					for (int i = 0; i < run; i++) {
+						byte bb = dictionary[dictReadIndex];
+						dictionary[dictionaryIndex] = bb;
+						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						if (result < len) {
+							b[off + result] = bb;
+							result++;
+						} else
+							numPendingOutputBytes++;
 					}
 				}
 			}
