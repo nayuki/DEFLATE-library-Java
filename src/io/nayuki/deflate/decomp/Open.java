@@ -494,7 +494,7 @@ public final class Open implements State {
 				if (inputBitBufferLength > 0) {  // Medium path using buffered bits
 					node = codeTree[node + ((int)inputBitBuffer & 1)];
 					inputBitBuffer >>>= 1;
-				inputBitBufferLength--;
+					inputBitBufferLength--;
 				} else  // Slow path with potential I/O operations
 					node = codeTree[node + readBits(1)];
 			}
@@ -511,7 +511,7 @@ public final class Open implements State {
 				return sym - 254;
 			else if (sym <= 284) {
 				int numExtraBits = (sym - 261) >>> 2;
-			return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
+				return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
 			} else if (sym == 285)
 				return 258;
 			else {  // sym is 286 or 287
