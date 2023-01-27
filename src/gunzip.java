@@ -15,6 +15,7 @@ import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.BitSet;
 import java.util.Date;
 import java.util.zip.CRC32;
 import io.nayuki.deflate.InflaterInputStream;
@@ -53,17 +54,19 @@ public final class gunzip {
 		
 		try (DataInputStream din = new DataInputStream(new MarkableFileInputStream(inFile))) {
 			// Read and process 10-byte header
-			int flags;
+			BitSet flags;
 			{
 				if (din.readUnsignedShort() != 0x1F8B)
 					return "Invalid GZIP magic number";
 				int compressionMethod = din.readUnsignedByte();
 				if (compressionMethod != 8)
 					return "Unsupported compression method: " + compressionMethod;
-				flags = din.readUnsignedByte();
+				var flagByte = new byte[1];
+				din.readFully(flagByte);
+				flags = BitSet.valueOf(flagByte);
 				
 				// Reserved flags
-				if ((flags & 0xE0) != 0)
+				if (flags.get(5) || flags.get(6) || flags.get(7))
 					return "Reserved flags are set";
 				
 				// Modification time
@@ -106,21 +109,21 @@ public final class gunzip {
 			
 			// Handle assorted flags and read more data
 			{
-				if ((flags & 0x01) != 0)
+				if (flags.get(0))
 					System.err.println("Flag: Text");
-				if ((flags & 0x04) != 0) {
+				if (flags.get(2)) {
 					System.err.println("Flag: Extra");
 					int len = readLittleEndianUint16(din);
 					din.readFully(new byte[len]);  // Skip extra data
 				}
-				if ((flags & 0x08) != 0)
+				if (flags.get(3))
 					System.err.println("File name: " + readNullTerminatedString(din));
-				if ((flags & 0x02) != 0) {
+				if (flags.get(1)) {
 					byte[] b = new byte[2];
 					din.readFully(b);
 					System.err.printf("Header CRC-16: %04X%n", (b[0] & 0xFF) | (b[1] & 0xFF) << 8);
 				}
-				if ((flags & 0x10) != 0)
+				if (flags.get(4))
 					System.err.println("Comment: " + readNullTerminatedString(din));
 			}
 			
