@@ -24,7 +24,7 @@ import java.util.Objects;
  */
 public final class DeflaterOutputStream extends OutputStream {
 	
-	private OutputStream out;
+	private OutputStream output;
 	private byte[] buffer;
 	private int index;
 	private boolean isFinished;
@@ -32,7 +32,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	public DeflaterOutputStream(OutputStream out) {
-		this.out = Objects.requireNonNull(out);
+		this.output = Objects.requireNonNull(out);
 		buffer = new byte[5 + 65535];
 		index = 5;
 		isFinished = false;
@@ -72,7 +72,7 @@ public final class DeflaterOutputStream extends OutputStream {
 			throw new IllegalStateException();
 		if (index > 5)  // If current block is not empty
 			writeBuffer(false);
-		out.flush();
+		output.flush();
 	}
 	
 	
@@ -87,7 +87,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	@Override public void close() throws IOException {
 		if (!isFinished)
 			finish();
-		out.close();
+		output.close();
 	}
 	
 	
@@ -105,7 +105,7 @@ public final class DeflaterOutputStream extends OutputStream {
 		buffer[4] = (byte)(nlen >>> 8);
 		
 		// Write and reset
-		out.write(buffer, 0, index);
+		output.write(buffer, 0, index);
 		index = 5;
 	}
 	
