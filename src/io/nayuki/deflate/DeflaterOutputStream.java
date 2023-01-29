@@ -40,7 +40,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	@Override public void write(int b) throws IOException {
 		if (output == null)
-			throw new IllegalStateException();
+			throw new IllegalStateException("Stream already closed");
 		if (index == buffer.length)
 			writeBuffer(false);
 		buffer[index] = (byte)b;
@@ -50,7 +50,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	@Override public void write(byte[] b, int off, int len) throws IOException {
 		if (output == null)
-			throw new IllegalStateException();
+			throw new IllegalStateException("Stream already closed");
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
 			throw new IndexOutOfBoundsException();
 		while (len > 0) {
@@ -76,7 +76,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	private void writeBuffer(boolean isFinal) throws IOException {
 		if (output == null)
-			throw new IllegalStateException();
+			throw new IllegalStateException("Stream already closed");
 		
 		// Fill in header fields
 		int len = index - 5;
