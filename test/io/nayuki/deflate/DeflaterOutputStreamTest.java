@@ -11,6 +11,7 @@ package io.nayuki.deflate;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.Random;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterOutputStream;
@@ -61,6 +62,23 @@ public class DeflaterOutputStreamTest {
 			dout.close();
 			checkInflate(data, bout.toByteArray());
 		}
+	}
+	
+	
+	@Test public void testByteRunsRandomly() throws IOException {
+		var bout = new ByteArrayOutputStream();
+		for (int i = 0; i < 1000; i++) {
+			var b = new byte[rand.nextInt(1000) + 1];
+			Arrays.fill(b, (byte)rand.nextInt(1 << 8));
+			bout.write(b);
+		}
+		byte[] data = bout.toByteArray();
+		
+		bout = new ByteArrayOutputStream();
+		DeflaterOutputStream dout = new DeflaterOutputStream(bout);
+		dout.write(data);
+		dout.close();
+		checkInflate(data, bout.toByteArray());
 	}
 	
 	
