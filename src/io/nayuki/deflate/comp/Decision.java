@@ -16,7 +16,7 @@ public interface Decision {
 	public long getBitLength();
 	
 	
-	public boolean containsUncompressedBlock();
+	public int getBitPositionBeforeAligningToByte();
 	
 	
 	public void compressTo(BitOutputStream out, boolean isFinal) throws IOException;

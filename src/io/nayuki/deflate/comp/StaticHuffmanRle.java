@@ -71,8 +71,8 @@ public enum StaticHuffmanRle implements Strategy {
 				return bitLength;
 			}
 			
-			@Override public boolean containsUncompressedBlock() {
-				return false;
+			@Override public int getBitPositionBeforeAligningToByte() {
+				return -1;
 			}
 			
 			@Override public void compressTo(BitOutputStream out, boolean isFinal) throws IOException {
