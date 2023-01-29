@@ -67,17 +67,11 @@ public final class DeflaterOutputStream extends OutputStream {
 	}
 	
 	
-	public void finish() throws IOException {
-		if (isFinished)
-			throw new IllegalStateException();
-		writeBuffer(true);
-		isFinished = true;
-	}
-	
-	
 	@Override public void close() throws IOException {
-		if (!isFinished)
-			finish();
+		if (!isFinished) {
+			writeBuffer(true);
+			isFinished = true;
+		}
 		output.close();
 	}
 	
