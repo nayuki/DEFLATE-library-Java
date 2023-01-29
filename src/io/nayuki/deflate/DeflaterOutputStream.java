@@ -27,7 +27,6 @@ public final class DeflaterOutputStream extends OutputStream {
 	private OutputStream output;
 	private byte[] buffer;
 	private int index;
-	private boolean isFinished;
 	
 	
 	
@@ -35,13 +34,12 @@ public final class DeflaterOutputStream extends OutputStream {
 		this.output = Objects.requireNonNull(out);
 		buffer = new byte[5 + 65535];
 		index = 5;
-		isFinished = false;
 	}
 	
 	
 	
 	@Override public void write(int b) throws IOException {
-		if (isFinished)
+		if (output == null)
 			throw new IllegalStateException();
 		if (index == buffer.length)
 			writeBuffer(false);
@@ -51,7 +49,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	@Override public void write(byte[] b, int off, int len) throws IOException {
-		if (isFinished)
+		if (output == null)
 			throw new IllegalStateException();
 		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
 			throw new IndexOutOfBoundsException();
@@ -68,16 +66,16 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	@Override public void close() throws IOException {
-		if (!isFinished) {
+		if (output != null) {
 			writeBuffer(true);
-			isFinished = true;
+			output.close();
+			output = null;
 		}
-		output.close();
 	}
 	
 	
 	private void writeBuffer(boolean isFinal) throws IOException {
-		if (isFinished)
+		if (output == null)
 			throw new IllegalStateException();
 		
 		// Fill in header fields
