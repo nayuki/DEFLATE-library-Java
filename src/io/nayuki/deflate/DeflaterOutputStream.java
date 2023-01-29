@@ -67,15 +67,6 @@ public final class DeflaterOutputStream extends OutputStream {
 	}
 	
 	
-	@Override public void flush() throws IOException {
-		if (isFinished)
-			throw new IllegalStateException();
-		if (index > 5)  // If current block is not empty
-			writeBuffer(false);
-		output.flush();
-	}
-	
-	
 	public void finish() throws IOException {
 		if (isFinished)
 			throw new IllegalStateException();
