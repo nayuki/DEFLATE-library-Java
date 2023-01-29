@@ -12,6 +12,10 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Objects;
+import io.nayuki.deflate.comp.BitOutputStream;
+import io.nayuki.deflate.comp.Decision;
+import io.nayuki.deflate.comp.Strategy;
+import io.nayuki.deflate.comp.Uncompressed;
 
 
 /**
@@ -24,16 +28,27 @@ import java.util.Objects;
  */
 public final class DeflaterOutputStream extends OutputStream {
 	
-	private OutputStream output;
-	private byte[] buffer;
-	private int index;
+	private static final int HISTORY_CAPACITY = 32 * 1024;
 	
+	
+	private OutputStream output;
+	private BitOut bitOutput;
+	private byte[] buffer;
+	private int historyLength = 0;
+	private int dataEndIndex = HISTORY_CAPACITY;
 	
 	
 	public DeflaterOutputStream(OutputStream out) {
+		this(out, 64 * 1024);  // Default buffer size
+	}
+	
+	
+	public DeflaterOutputStream(OutputStream out, int bufferLen) {
 		this.output = Objects.requireNonNull(out);
-		buffer = new byte[5 + 65535];
-		index = 5;
+		bitOutput = new BitOut();
+		if (bufferLen < 1 || bufferLen > Integer.MAX_VALUE - HISTORY_CAPACITY)
+			throw new IllegalArgumentException("Invalid buffer length");
+		buffer = new byte[HISTORY_CAPACITY + bufferLen];
 	}
 	
 	
@@ -41,10 +56,10 @@ public final class DeflaterOutputStream extends OutputStream {
 	@Override public void write(int b) throws IOException {
 		if (output == null)
 			throw new IllegalStateException("Stream already closed");
-		if (index == buffer.length)
+		if (dataEndIndex == buffer.length)
 			writeBuffer(false);
-		buffer[index] = (byte)b;
-		index++;
+		buffer[dataEndIndex] = (byte)b;
+		dataEndIndex++;
 	}
 	
 	
@@ -53,13 +68,13 @@ public final class DeflaterOutputStream extends OutputStream {
 			throw new IllegalStateException("Stream already closed");
 		Objects.checkFromIndexSize(off, len, b.length);
 		while (len > 0) {
-			if (index == buffer.length)
+			if (dataEndIndex == buffer.length)
 				writeBuffer(false);
-			int n = Math.min(len, buffer.length - index);
-			System.arraycopy(b, off, buffer, index, n);
+			int n = Math.min(len, buffer.length - dataEndIndex);
+			System.arraycopy(b, off, buffer, dataEndIndex, n);
 			off += n;
 			len -= n;
-			index += n;
+			dataEndIndex += n;
 		}
 	}
 	
@@ -67,6 +82,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	@Override public void close() throws IOException {
 		if (output != null) {
 			writeBuffer(true);
+			bitOutput.finish();
 			output.close();
 			output = null;
 		}
@@ -77,18 +93,55 @@ public final class DeflaterOutputStream extends OutputStream {
 		if (output == null)
 			throw new IllegalStateException("Stream already closed");
 		
-		// Fill in header fields
-		int len = index - 5;
-		int nlen = len ^ 0xFFFF;
-		buffer[0] = (byte)(isFinal ? 0x01 : 0x00);
-		buffer[1] = (byte)(len >>> 0);
-		buffer[2] = (byte)(len >>> 8);
-		buffer[3] = (byte)(nlen >>> 0);
-		buffer[4] = (byte)(nlen >>> 8);
+		assert 0 <= historyLength && historyLength <= HISTORY_CAPACITY;
+		assert HISTORY_CAPACITY <= dataEndIndex && dataEndIndex <= buffer.length;
+		int historyStart = HISTORY_CAPACITY - historyLength;
+		int dataLen = dataEndIndex - HISTORY_CAPACITY;
 		
-		// Write and reset
-		output.write(buffer, 0, index);
-		index = 5;
+		Strategy st = Uncompressed.SINGLETON;
+		Decision dec = st.decide(buffer, historyStart, historyLength, dataLen);
+		dec.compressTo(bitOutput, isFinal);
+		
+		if (!isFinal) {
+			int n = Math.min(dataEndIndex - HISTORY_CAPACITY, HISTORY_CAPACITY);
+			System.arraycopy(buffer, dataEndIndex - n, buffer, HISTORY_CAPACITY - n, n);
+			historyLength = Math.min(dataEndIndex - historyStart, HISTORY_CAPACITY);
+			dataEndIndex = HISTORY_CAPACITY;
+		}
+	}
+	
+	
+	
+	private final class BitOut implements BitOutputStream {
+		
+		private long bitBuffer = 0;
+		private int bitBufferLength = 0;
+		
+		
+		@Override public void writeBits(int value, int numBits) throws IOException {
+			assert 0 <= numBits && numBits <= 31 && value >>> numBits == 0;
+			if (numBits > 64 - bitBufferLength) {
+				for (; bitBufferLength >= 8; bitBufferLength -= 8, bitBuffer >>>= 8)
+					output.write((byte)bitBuffer);
+			}
+			assert numBits <= 64 - bitBufferLength;
+			bitBuffer |= (long)value << bitBufferLength;
+			bitBufferLength += numBits;
+		}
+		
+		
+		@Override public int getBitPosition() {
+			return bitBufferLength % 8;
+		}
+		
+		
+		public void finish() throws IOException {
+			writeBits(0, (8 - getBitPosition()) % 8);
+			for (; bitBufferLength >= 8; bitBufferLength -= 8, bitBuffer >>>= 8)
+				output.write((byte)bitBuffer);
+			assert bitBufferLength == 0;
+		}
+		
 	}
 	
 }
