@@ -28,27 +28,36 @@ import io.nayuki.deflate.comp.Uncompressed;
  */
 public final class DeflaterOutputStream extends OutputStream {
 	
-	private static final int HISTORY_CAPACITY = 32 * 1024;
+	private static final int MAX_HISTORY_CAPACITY = 32 * 1024;
 	
 	
 	private OutputStream output;
 	private BitOut bitOutput;
-	private byte[] buffer;
+	
+	// [unused][history (historyLength)][data (dataLength)][unused]
+	// ^0      ^historyStart                 combinedBuffer.length^
+	private byte[] combinedBuffer;
+	private final int historyLookbehindLimit;
+	private final int dataLookaheadLimit;
+	private int historyStart = 0;
 	private int historyLength = 0;
-	private int dataEndIndex = HISTORY_CAPACITY;
+	private int dataLength = 0;
 	
 	
 	public DeflaterOutputStream(OutputStream out) {
-		this(out, 64 * 1024);  // Default buffer size
+		this(out, 64 * 1024, MAX_HISTORY_CAPACITY);
 	}
 	
 	
-	public DeflaterOutputStream(OutputStream out, int bufferLen) {
+	public DeflaterOutputStream(OutputStream out, int dataLookaheadLimit, int historyLookbehindLimit) {
 		this.output = Objects.requireNonNull(out);
 		bitOutput = new BitOut();
-		if (bufferLen < 1 || bufferLen > Integer.MAX_VALUE - HISTORY_CAPACITY)
-			throw new IllegalArgumentException("Invalid buffer length");
-		buffer = new byte[HISTORY_CAPACITY + bufferLen];
+		if (dataLookaheadLimit < 1 || historyLookbehindLimit < 0 || historyLookbehindLimit > MAX_HISTORY_CAPACITY
+				|| (long)dataLookaheadLimit + historyLookbehindLimit > Integer.MAX_VALUE)
+			throw new IllegalArgumentException("Invalid capacities");
+		combinedBuffer = new byte[historyLookbehindLimit + Math.max(dataLookaheadLimit, historyLookbehindLimit)];
+		this.historyLookbehindLimit = historyLookbehindLimit;
+		this.dataLookaheadLimit = dataLookaheadLimit;
 	}
 	
 	
@@ -56,10 +65,10 @@ public final class DeflaterOutputStream extends OutputStream {
 	@Override public void write(int b) throws IOException {
 		if (output == null)
 			throw new IllegalStateException("Stream already closed");
-		if (dataEndIndex == buffer.length)
+		if (dataLength >= dataLookaheadLimit)
 			writeBuffer(false);
-		buffer[dataEndIndex] = (byte)b;
-		dataEndIndex++;
+		combinedBuffer[historyStart + historyLength + dataLength] = (byte)b;
+		dataLength++;
 	}
 	
 	
@@ -68,13 +77,13 @@ public final class DeflaterOutputStream extends OutputStream {
 			throw new IllegalStateException("Stream already closed");
 		Objects.checkFromIndexSize(off, len, b.length);
 		while (len > 0) {
-			if (dataEndIndex == buffer.length)
+			if (dataLength >= dataLookaheadLimit)
 				writeBuffer(false);
-			int n = Math.min(len, buffer.length - dataEndIndex);
-			System.arraycopy(b, off, buffer, dataEndIndex, n);
+			int n = Math.min(len, dataLookaheadLimit - dataLength);
+			System.arraycopy(b, off, combinedBuffer, historyStart + historyLength + dataLength, n);
 			off += n;
 			len -= n;
-			dataEndIndex += n;
+			dataLength += n;
 		}
 	}
 	
@@ -93,20 +102,20 @@ public final class DeflaterOutputStream extends OutputStream {
 		if (output == null)
 			throw new IllegalStateException("Stream already closed");
 		
-		assert 0 <= historyLength && historyLength <= HISTORY_CAPACITY;
-		assert HISTORY_CAPACITY <= dataEndIndex && dataEndIndex <= buffer.length;
-		int historyStart = HISTORY_CAPACITY - historyLength;
-		int dataLen = dataEndIndex - HISTORY_CAPACITY;
-		
-		Strategy st = Uncompressed.SINGLETON;
-		Decision dec = st.decide(buffer, historyStart, historyLength, dataLen);
+		Strategy st = io.nayuki.deflate.comp.StaticHuffmanRle.SINGLETON;
+		Decision dec = st.decide(combinedBuffer, historyStart, historyLength, dataLength);
 		dec.compressTo(bitOutput, isFinal);
+		if (isFinal)
+			return;
 		
-		if (!isFinal) {
-			int n = Math.min(dataEndIndex - HISTORY_CAPACITY, HISTORY_CAPACITY);
-			System.arraycopy(buffer, dataEndIndex - n, buffer, HISTORY_CAPACITY - n, n);
-			historyLength = Math.min(dataEndIndex - historyStart, HISTORY_CAPACITY);
-			dataEndIndex = HISTORY_CAPACITY;
+		int dataEnd = historyStart + historyLength + dataLength;
+		historyLength = Math.min(historyLength + dataLength, historyLookbehindLimit);
+		dataLength = 0;
+		if (combinedBuffer.length - dataEnd >= dataLookaheadLimit)
+			historyStart = dataEnd - historyLength;
+		else {
+			System.arraycopy(combinedBuffer, dataEnd - historyLength, combinedBuffer, 0, historyLength);
+			historyStart = 0;
 		}
 	}
 	
