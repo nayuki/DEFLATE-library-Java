@@ -204,7 +204,7 @@ public final class Open implements State {
 	
 	
 	
-	private enum BetweenBlocks implements Substate { SINGLETON; }
+	private enum BetweenBlocks implements Substate { SINGLETON }
 	
 	
 	
