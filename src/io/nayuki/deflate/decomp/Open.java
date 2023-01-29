@@ -8,6 +8,7 @@
 
 package io.nayuki.deflate.decomp;
 
+import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -112,12 +113,7 @@ public final class Open implements State {
 		input.reset();
 		int skip = inputBuffer.position() - inputBitBufferLength / 8;
 		assert skip >= 0;
-		while (skip > 0) {
-			long n = input.skip(skip);
-			if (n <= 0)
-				throw new EOFException();
-			skip -= n;
-		}
+		new DataInputStream(input).skipNBytes(skip);
 	}
 	
 	
