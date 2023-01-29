@@ -9,9 +9,9 @@
 package io.nayuki.deflate;
 
 import java.io.BufferedOutputStream;
-import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Objects;
 
 
 /**
@@ -22,8 +22,9 @@ import java.io.OutputStream;
  * {@link BufferedOutputStream} around the {@link OutputStream} given to the constructor.</p>
  * @see InflaterInputStream
  */
-public final class DeflaterOutputStream extends FilterOutputStream {
+public final class DeflaterOutputStream extends OutputStream {
 	
+	private OutputStream out;
 	private byte[] buffer;
 	private int index;
 	private boolean isFinished;
@@ -31,7 +32,7 @@ public final class DeflaterOutputStream extends FilterOutputStream {
 	
 	
 	public DeflaterOutputStream(OutputStream out) {
-		super(out);
+		this.out = Objects.requireNonNull(out);
 		buffer = new byte[5 + 65535];
 		index = 5;
 		isFinished = false;
