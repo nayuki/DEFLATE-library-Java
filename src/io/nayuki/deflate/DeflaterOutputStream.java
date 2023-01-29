@@ -51,8 +51,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	@Override public void write(byte[] b, int off, int len) throws IOException {
 		if (output == null)
 			throw new IllegalStateException("Stream already closed");
-		if (off < 0 || off > b.length || len < 0 || b.length - off < len)
-			throw new IndexOutOfBoundsException();
+		Objects.checkFromIndexSize(off, len, b.length);
 		while (len > 0) {
 			if (index == buffer.length)
 				writeBuffer(false);
