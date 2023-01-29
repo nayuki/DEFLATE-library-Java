@@ -39,7 +39,7 @@ public final class Open implements State {
 	//   -> b (the array passed into this.read(byte[],int,int)).
 	
 	// Buffer of bytes read from input.read() (the underlying input stream)
-	private ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
+	private final ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
 	
 	// Buffer of bits packed from the bytes in `inputBuffer`
 	private long inputBitBuffer = 0;       // Always in the range [0, 2^inputBitBufferLength)
@@ -54,7 +54,7 @@ public final class Open implements State {
 	
 	
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
-	private byte[] dictionary = new byte[DICTIONARY_LENGTH];
+	private final byte[] dictionary = new byte[DICTIONARY_LENGTH];
 	private int dictionaryIndex = 0;
 	
 	
