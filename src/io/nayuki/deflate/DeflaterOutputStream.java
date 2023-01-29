@@ -55,11 +55,11 @@ public final class DeflaterOutputStream extends OutputStream {
 		while (len > 0) {
 			if (index == buffer.length)
 				writeBuffer(false);
-			int chunk = Math.min(len, buffer.length - index);
-			System.arraycopy(b, off, buffer, index, chunk);
-			off += chunk;
-			len -= chunk;
-			index += chunk;
+			int n = Math.min(len, buffer.length - index);
+			System.arraycopy(b, off, buffer, index, n);
+			off += n;
+			len -= n;
+			index += n;
 		}
 	}
 	
