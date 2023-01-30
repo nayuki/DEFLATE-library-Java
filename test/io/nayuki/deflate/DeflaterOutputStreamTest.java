@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Random;
 import org.junit.Assert;
@@ -23,9 +24,9 @@ public class DeflaterOutputStreamTest {
 	@Test public void testEmpty() throws IOException {
 		byte[] data = {};
 		var bout = new ByteArrayOutputStream();
-		DeflaterOutputStream dout = new DeflaterOutputStream(bout);
-		dout.write(data);
-		dout.close();
+		try (OutputStream dout = new DeflaterOutputStream(bout)) {
+			dout.write(data);
+		}
 		checkInflate(data, bout.toByteArray());
 	}
 	
@@ -35,9 +36,9 @@ public class DeflaterOutputStreamTest {
 			var data = new byte[rand.nextInt(100)];
 			rand.nextBytes(data);
 			var bout = new ByteArrayOutputStream();
-			DeflaterOutputStream dout = new DeflaterOutputStream(bout);
-			dout.write(data);
-			dout.close();
+			try (OutputStream dout = new DeflaterOutputStream(bout)) {
+				dout.write(data);
+			}
 			checkInflate(data, bout.toByteArray());
 		}
 	}
@@ -48,18 +49,18 @@ public class DeflaterOutputStreamTest {
 			var data = new byte[rand.nextInt(1000)];
 			rand.nextBytes(data);
 			var bout = new ByteArrayOutputStream();
-			DeflaterOutputStream dout = new DeflaterOutputStream(bout);
-			for (int off = 0; off < data.length; ) {
-				if (rand.nextDouble() < 0.1) {
-					dout.write(data[off]);
-					off++;
-				} else {
-					int n = rand.nextInt(Math.min(100, data.length - off)) + 1;
-					dout.write(data, off, n);
-					off += n;
+			try (OutputStream dout = new DeflaterOutputStream(bout)) {
+				for (int off = 0; off < data.length; ) {
+					if (rand.nextDouble() < 0.1) {
+						dout.write(data[off]);
+						off++;
+					} else {
+						int n = rand.nextInt(Math.min(100, data.length - off)) + 1;
+						dout.write(data, off, n);
+						off += n;
+					}
 				}
 			}
-			dout.close();
 			checkInflate(data, bout.toByteArray());
 		}
 	}
@@ -75,9 +76,9 @@ public class DeflaterOutputStreamTest {
 		byte[] data = bout.toByteArray();
 		
 		bout = new ByteArrayOutputStream();
-		DeflaterOutputStream dout = new DeflaterOutputStream(bout);
-		dout.write(data);
-		dout.close();
+		try (OutputStream dout = new DeflaterOutputStream(bout)) {
+			dout.write(data);
+		}
 		checkInflate(data, bout.toByteArray());
 	}
 	
@@ -87,18 +88,18 @@ public class DeflaterOutputStreamTest {
 			var data = new byte[rand.nextInt(1000000)];
 			rand.nextBytes(data);
 			ByteArrayOutputStream bout = new ByteArrayOutputStream();
-			DeflaterOutputStream dout = new DeflaterOutputStream(bout);
-			for (int off = 0; off < data.length; ) {
-				if (rand.nextDouble() < 0.9) {
-					dout.write(data[off]);
-					off++;
-				} else {
-					int n = rand.nextInt(Math.min(300000, data.length - off)) + 1;
-					dout.write(data, off, n);
-					off += n;
+			try (OutputStream dout = new DeflaterOutputStream(bout)) {
+				for (int off = 0; off < data.length; ) {
+					if (rand.nextDouble() < 0.9) {
+						dout.write(data[off]);
+						off++;
+					} else {
+						int n = rand.nextInt(Math.min(300000, data.length - off)) + 1;
+						dout.write(data, off, n);
+						off += n;
+					}
 				}
 			}
-			dout.close();
 			checkInflate(data, bout.toByteArray());
 		}
 	}
