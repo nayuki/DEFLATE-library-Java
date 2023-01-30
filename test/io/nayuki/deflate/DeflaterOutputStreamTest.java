@@ -23,7 +23,7 @@ public class DeflaterOutputStreamTest {
 	
 	@Test public void testEmpty() throws IOException {
 		byte[] data = new byte[0];
-		ByteArrayOutputStream bout = new ByteArrayOutputStream();
+		var bout = new ByteArrayOutputStream();
 		DeflaterOutputStream dout = new DeflaterOutputStream(bout);
 		dout.close();
 		checkInflate(data, bout.toByteArray());
@@ -32,9 +32,9 @@ public class DeflaterOutputStreamTest {
 	
 	@Test public void testShortSingleWriteRandomly() throws IOException {
 		for (int i = 0; i < 1000; i++) {
-			byte[] data = new byte[rand.nextInt(100)];
+			var data = new byte[rand.nextInt(100)];
 			rand.nextBytes(data);
-			ByteArrayOutputStream bout = new ByteArrayOutputStream();
+			var bout = new ByteArrayOutputStream();
 			DeflaterOutputStream dout = new DeflaterOutputStream(bout);
 			dout.write(data);
 			dout.close();
@@ -45,9 +45,9 @@ public class DeflaterOutputStreamTest {
 	
 	@Test public void testShortMultiWriteRandomly() throws IOException {
 		for (int i = 0; i < 1000; i++) {
-			byte[] data = new byte[rand.nextInt(1000)];
+			var data = new byte[rand.nextInt(1000)];
 			rand.nextBytes(data);
-			ByteArrayOutputStream bout = new ByteArrayOutputStream();
+			var bout = new ByteArrayOutputStream();
 			DeflaterOutputStream dout = new DeflaterOutputStream(bout);
 			for (int off = 0; off < data.length; ) {
 				if (rand.nextDouble() < 0.1) {
@@ -84,7 +84,7 @@ public class DeflaterOutputStreamTest {
 	
 	@Test public void testLongRandomly() throws IOException {
 		for (int i = 0; i < 1000; i++) {
-			byte[] data = new byte[rand.nextInt(1000000)];
+			var data = new byte[rand.nextInt(1000000)];
 			rand.nextBytes(data);
 			ByteArrayOutputStream bout = new ByteArrayOutputStream();
 			DeflaterOutputStream dout = new DeflaterOutputStream(bout);
@@ -106,7 +106,7 @@ public class DeflaterOutputStreamTest {
 	
 	
 	private static void checkInflate(byte[] uncomp, byte[] comp) throws IOException {
-		ByteArrayOutputStream bout = new ByteArrayOutputStream();
+		var bout = new ByteArrayOutputStream();
 		OutputStream iout = new InflaterOutputStream(bout, new Inflater(true));
 		iout.write(comp);
 		iout.write(0);  // Extra dummy data as per the API spec

@@ -48,7 +48,7 @@ public enum DynamicHuffmanRle implements Strategy {
 				final int end = index + dataLen;
 				
 				int[] distCodeLen = {0};
-				int[] histogram = new int[286];
+				var histogram = new int[286];
 				while (index < end) {
 					if (index > off) {
 						byte prev = b[index - 1];
@@ -86,7 +86,7 @@ public enum DynamicHuffmanRle implements Strategy {
 					histogram[0]++;  // Dummy value to fill the Huffman code tree
 				int[] litLenCodeLen = calcHuffmanCodeLengths(histogram, 15);
 				
-				int[] codeLens = new int[litLenCodeLen.length + distCodeLen.length];
+				var codeLens = new int[litLenCodeLen.length + distCodeLen.length];
 				System.arraycopy(litLenCodeLen, 0, codeLens, 0, litLenCodeLen.length);
 				System.arraycopy(distCodeLen, 0, codeLens, litLenCodeLen.length, distCodeLen.length);
 				
@@ -133,7 +133,7 @@ public enum DynamicHuffmanRle implements Strategy {
 					histogram[sym]++;
 				int[] codeLenCodeLen = calcHuffmanCodeLengths(histogram, 7);
 				
-				int[] reordered = new int[codeLenCodeLen.length];
+				var reordered = new int[codeLenCodeLen.length];
 				for (int i = 0; i < reordered.length; i++)
 					reordered[i] = codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]];
 				int numCodeLenCodeLens = reordered.length;
@@ -256,7 +256,7 @@ public enum DynamicHuffmanRle implements Strategy {
 			nodes = newNodes;
 		}
 		
-		int[] nodeHistogram = new int[symbolHistogram.length];
+		var nodeHistogram = new int[symbolHistogram.length];
 		for (int i = 0; i < leaves.size() - 1; i++)
 			nodes.get(i).countOccurrences(nodeHistogram);
 		return nodeHistogram;
@@ -304,7 +304,7 @@ public enum DynamicHuffmanRle implements Strategy {
 	private static int[] codeLengthsToCodes(int[] codeLengths, int maxCodeLength) {
 		if (!(1 <= maxCodeLength && maxCodeLength <= 15))
 			throw new IllegalArgumentException("Invalid maximum code length");
-		int[] result = new int[codeLengths.length];
+		var result = new int[codeLengths.length];
 		int nextCode = 0;
 		for (int codeLength = 1; codeLength <= maxCodeLength; codeLength++) {
 			nextCode <<= 1;
