@@ -22,9 +22,10 @@ import org.junit.Test;
 public class DeflaterOutputStreamTest {
 	
 	@Test public void testEmpty() throws IOException {
-		byte[] data = new byte[0];
+		byte[] data = {};
 		var bout = new ByteArrayOutputStream();
 		DeflaterOutputStream dout = new DeflaterOutputStream(bout);
+		dout.write(data);
 		dout.close();
 		checkInflate(data, bout.toByteArray());
 	}
