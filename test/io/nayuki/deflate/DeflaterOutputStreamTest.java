@@ -8,13 +8,12 @@
 
 package io.nayuki.deflate;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.zip.Inflater;
-import java.util.zip.InflaterOutputStream;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -108,10 +107,9 @@ public class DeflaterOutputStreamTest {
 	
 	private static void checkInflate(byte[] uncomp, byte[] comp) throws IOException {
 		var bout = new ByteArrayOutputStream();
-		OutputStream iout = new InflaterOutputStream(bout, new Inflater(true));
-		iout.write(comp);
-		iout.write(0);  // Extra dummy data as per the API spec
-		iout.close();
+		try (InputStream in = new InflaterInputStream(new ByteArrayInputStream(comp))) {
+			in.transferTo(bout);
+		}
 		Assert.assertArrayEquals(uncomp, bout.toByteArray());
 	}
 	
