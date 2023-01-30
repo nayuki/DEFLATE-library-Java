@@ -14,6 +14,9 @@ import java.io.OutputStream;
 import java.util.Objects;
 import io.nayuki.deflate.comp.BitOutputStream;
 import io.nayuki.deflate.comp.Decision;
+import io.nayuki.deflate.comp.DynamicHuffmanRle;
+import io.nayuki.deflate.comp.MultiStrategy;
+import io.nayuki.deflate.comp.StaticHuffmanRle;
 import io.nayuki.deflate.comp.Strategy;
 import io.nayuki.deflate.comp.Uncompressed;
 
@@ -102,7 +105,10 @@ public final class DeflaterOutputStream extends OutputStream {
 		if (output == null)
 			throw new IllegalStateException("Stream already closed");
 		
-		Strategy st = io.nayuki.deflate.comp.StaticHuffmanRle.SINGLETON;
+		Strategy st = new MultiStrategy(
+			Uncompressed.SINGLETON,
+			StaticHuffmanRle.SINGLETON,
+			DynamicHuffmanRle.SINGLETON);
 		Decision dec = st.decide(combinedBuffer, historyStart, historyLength, dataLength);
 		dec.compressTo(bitOutput, isFinal);
 		if (isFinal)
