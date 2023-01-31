@@ -326,34 +326,37 @@ public final class Open implements State {
 				// Read the main code lengths and handle runs
 				var codeLens = new byte[numLitLenCodes + numDistCodes];
 				byte runVal = -1;
-				int runLen = 0;
 				for (int i = 0; i < codeLens.length; ) {
-					if (runLen > 0) {
-						assert runVal != -1;
+					int sym = decodeSymbol(codeLenCodeTree);
+					assert 0 <= sym && sym < codeLenCodeLen.length;
+					if (sym < 16) {
+						runVal = (byte)sym;
 						codeLens[i] = runVal;
-						runLen--;
 						i++;
 					} else {
-						int sym = decodeSymbol(codeLenCodeTree);
-						assert 0 <= sym && sym < codeLenCodeLen.length;
-						if (sym < 16) {
-							runVal = codeLens[i] = (byte)sym;
-							i++;
-						} else if (sym == 16) {
-							if (runVal == -1)
-								throw new DataFormatException("No code length value to copy");
-							runLen = readBits(2) + 3;
-						} else if (sym == 17) {
-							runVal = 0;
-							runLen = readBits(3) + 3;
-						} else {  // sym == 18
-							runVal = 0;
-							runLen = readBits(7) + 11;
+						int runLen = switch (sym) {
+							case 16 -> {
+								if (runVal == -1)
+									throw new DataFormatException("No code length value to copy");
+								yield readBits(2) + 3;
+							}
+							case 17 -> {
+								runVal = 0;
+								yield readBits(3) + 3;
+							}
+							case 18 -> {
+								runVal = 0;
+								yield readBits(7) + 11;
+							}
+							default -> throw new AssertionError("Unreachable value");
+						};
+						for (; runLen > 0; runLen--, i++) {
+							if (i >= codeLens.length)
+								throw new DataFormatException("Run exceeds number of codes");
+							codeLens[i] = runVal;
 						}
 					}
 				}
-				if (runLen > 0)
-					throw new DataFormatException("Run exceeds number of codes");
 				
 				// Create literal-length code tree
 				byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
