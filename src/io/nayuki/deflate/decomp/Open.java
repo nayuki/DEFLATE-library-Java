@@ -278,7 +278,7 @@ public final class Open implements State {
 		private final short[] distanceCodeTable;  // Derived from distanceCodeTree; same nullness
 		private final int maxBitsPerIteration;  // In the range [2, 48]
 		
-		private int numPendingOutputBytes = 0;  // Always in the range [0, 256]
+		private int numPendingOutputBytes = 0;  // Always in the range [0, MAX_RUN_LENGTH-1]
 		private boolean isDone = false;
 		
 		
@@ -537,7 +537,7 @@ public final class Open implements State {
 				}
 				
 				// Copy bytes to output and dictionary
-				assert 3 <= run && run <= 258;
+				assert 3 <= run && run <= MAX_RUN_LENGTH;
 				assert 1 <= dist && dist <= 32768;
 				int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
 				if (end - index >= run) {  // Nice case with less branching
@@ -786,6 +786,9 @@ public final class Open implements State {
 			FIXED_LITERAL_LENGTH_CODE_TABLE = codeTreeToCodeTable(FIXED_LITERAL_LENGTH_CODE_TREE);
 			FIXED_DISTANCE_CODE_TABLE = codeTreeToCodeTable(FIXED_DISTANCE_CODE_TREE);
 		}
+		
+		
+		private static final int MAX_RUN_LENGTH = 258;  // Required by the specification, do not modify
 		
 		
 		// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i]
