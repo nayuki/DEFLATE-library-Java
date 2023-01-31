@@ -463,11 +463,10 @@ public final class Open implements State {
 					final int sym;
 					{
 						int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
-						assert temp >= 0;  // No need to mask off sign extension bits
-						int consumed = temp >>> 11;
+						int consumed = temp & 0xF;
 						inputBitBuffer >>>= consumed;
 						inputBitBufferLength -= consumed;
-						int node = (temp << 21) >> 21;  // Sign extension from 11 bits
+						int node = temp >> 4;
 						while (node >= 0) {
 							node = literalLengthCodeTree[node + ((int)inputBitBuffer & 1)];
 							inputBitBuffer >>>= 1;
@@ -506,11 +505,10 @@ public final class Open implements State {
 						final int distSym;
 						{
 							int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
-							assert temp >= 0;  // No need to mask off sign extension bits
-							int consumed = temp >>> 11;
+							int consumed = temp & 0xF;
 							inputBitBuffer >>>= consumed;
 							inputBitBufferLength -= consumed;
-							int node = (temp << 21) >> 21;  // Sign extension from 11 bits
+							int node = temp >> 4;
 							while (node >= 0) {  // Medium path
 								node = distanceCodeTree[node + ((int)inputBitBuffer & 1)];
 								inputBitBuffer >>>= 1;
@@ -754,12 +752,11 @@ public final class Open implements State {
 		 * decoding starting from the root and consuming the bits of i starting from
 		 * the lowest-order bits.
 		 * 
-		 * Each array element encodes (numBitsConsumed << 11) | (node & ((1<<11)-1), where:
+		 * Each array element encodes (node << 4) | numBitsConsumed, where:
 		 * - numBitsConsumed is a 4-bit unsigned integer in the range [1, CODE_TABLE_BITS].
-		 * - node is an 11-bit signed integer representing either the current node
+		 * - node is an 12-bit signed integer representing either the current node
 		 *   (which is a non-negative number) after consuming all the available bits
 		 *   from i, or the bitwise complement of the decoded symbol (so it's negative).
-		 * Note that each element is a non-negative number.
 		 */
 		private static short[] codeTreeToCodeTable(short[] codeTree) {
 			assert 1 <= CODE_TABLE_BITS && CODE_TABLE_BITS <= 15;
@@ -775,9 +772,8 @@ public final class Open implements State {
 				} while (node >= 0 && consumed < CODE_TABLE_BITS);
 				
 				assert 1 <= consumed && consumed <= 15;  // uint4
-				assert -1024 <= node && node <= 1023;  // int11
-				result[i] = (short)(consumed << 11 | (node & 0x7FF));
-				assert result[i] >= 0;
+				assert -2048 <= node && node <= 2047;  // int12
+				result[i] = (short)(node << 4 | consumed);
 			}
 			return result;
 		}
