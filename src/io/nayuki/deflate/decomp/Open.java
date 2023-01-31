@@ -230,11 +230,8 @@ public final class Open implements State {
 			assert off <= end && end <= b.length;
 			
 			// First unpack saved bits
-			for (; inputBitBufferLength >= 8 && index < end; index++) {
-				b[index] = (byte)inputBitBuffer;
-				inputBitBuffer >>>= 8;
-				inputBitBufferLength -= 8;
-			}
+			for (; inputBitBufferLength >= 8 && index < end; index++)
+				b[index] = (byte)readBits(8);
 			
 			// Copy from input buffer
 			{
