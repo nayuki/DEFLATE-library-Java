@@ -130,7 +130,7 @@ public final class Open implements State {
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
 		while (inputBitBufferLength < numBits) {
-			while (!inputBuffer.hasRemaining())
+			if (!inputBuffer.hasRemaining())
 				fillInputBuffer();
 			
 			// Pack as many bytes as possible from input byte buffer into the bit buffer
@@ -165,7 +165,10 @@ public final class Open implements State {
 		int n = input.read(inputBuffer.array());
 		if (n == -1)
 			throw new EOFException("Unexpected end of stream");
-		inputBuffer.position(0).limit(n);
+		else if (n == 0)
+			throw new AssertionError("read() returned zero bytes");
+		else
+			inputBuffer.position(0).limit(n);
 	}
 	
 	
