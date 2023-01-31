@@ -474,9 +474,9 @@ public final class Open implements State {
 					assert 0 <= sym && sym <= 287;
 					if (sym < 256) {  // Literal byte
 						b[index] = (byte)sym;
+						index++;
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						index++;
 						continue;
 						
 					} else if (sym > 256) {  // Length and distance for copying
@@ -535,9 +535,9 @@ public final class Open implements State {
 					assert 0 <= sym && sym <= 287;
 					if (sym < 256) {  // Literal byte
 						b[index] = (byte)sym;
+						index++;
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
-						index++;
 						continue;
 					} else if (sym > 256) {  // Length and distance for copying
 						run = decodeRunLength(sym);
@@ -559,17 +559,17 @@ public final class Open implements State {
 				if (run <= end - index) {  // Nice case with less branching
 					for (int i = 0; i < run; i++) {
 						byte bb = dictionary[dictReadIndex];
-						dictionary[dictionaryIndex] = bb;
-						b[index] = bb;
 						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+						dictionary[dictionaryIndex] = bb;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						b[index] = bb;
 						index++;
 					}
 				} else {  // General case
 					for (int i = 0; i < run; i++) {
 						byte bb = dictionary[dictReadIndex];
-						dictionary[dictionaryIndex] = bb;
 						dictReadIndex = (dictReadIndex + 1) & DICTIONARY_MASK;
+						dictionary[dictionaryIndex] = bb;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
 						if (index < end) {
 							b[index] = bb;
