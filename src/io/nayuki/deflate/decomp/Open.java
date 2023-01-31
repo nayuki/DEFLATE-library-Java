@@ -659,6 +659,9 @@ public final class Open implements State {
 		 * the other internal node is located at index 2.
 		 */
 		private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
+			final short CODE_TREE_UNUSED_SLOT = 0x7000;
+			final short CODE_TREE_OPEN_SLOT   = 0x7002;
+			
 			// Allocate array for the worst case if all symbols are present
 			var result = new short[(codeLengths.length - 1) * 2];
 			Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
@@ -764,10 +767,6 @@ public final class Open implements State {
 		private static final short[] FIXED_LITERAL_LENGTH_CODE_TABLE;
 		private static final short[] FIXED_DISTANCE_CODE_TREE;
 		private static final short[] FIXED_DISTANCE_CODE_TABLE;
-		
-		// For use in codeLengthsToCodeTree() only.
-		private static final short CODE_TREE_UNUSED_SLOT = 0x7000;
-		private static final short CODE_TREE_OPEN_SLOT   = 0x7002;
 		
 		// Any integer from 1 to 15 is valid. Affects speed but produces same output.
 		private static final int CODE_TABLE_BITS = 9;
