@@ -74,7 +74,6 @@ public final class Open implements State {
 	
 	public int read(byte[] b, int off, int len) throws IOException {
 		int result = 0;  // Number of bytes filled in the array `b`
-		
 		while (result < len) {
 			if (blockDecoder.isEmpty()) {  // Between blocks
 				if (isLastBlock)
@@ -96,7 +95,6 @@ public final class Open implements State {
 					blockDecoder = Optional.empty();
 			}
 		}
-		
 		return (result > 0 || blockDecoder.isPresent() || !isLastBlock) ? result : -1;
 	}
 	
@@ -162,7 +160,6 @@ public final class Open implements State {
 	private void fillInputBuffer() throws IOException {
 		if (inputBuffer.hasRemaining())
 			throw new AssertionError("Input buffer not fully consumed yet");
-		
 		if (isDetachable)
 			input.mark(inputBuffer.capacity());
 		int n = input.read(inputBuffer.array());
