@@ -301,7 +301,7 @@ public final class Open implements State {
 				
 				// Read the code length code lengths
 				int numCodeLenCodes = readBits(4) +   4;  // hclen +   4
-				var codeLenCodeLen = new byte[19];
+				var codeLenCodeLen = new byte[CODE_LENGTH_CODE_ORDER.length];
 				for (int i = 0; i < numCodeLenCodes; i++)  // Fill array in strange order
 					codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
 				short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
@@ -318,7 +318,7 @@ public final class Open implements State {
 						i++;
 					} else {
 						int sym = decodeSymbol(codeLenCodeTree);
-						assert 0 <= sym && sym <= 18;
+						assert 0 <= sym && sym < codeLenCodeLen.length;
 						if (sym < 16) {
 							runVal = codeLens[i] = (byte)sym;
 							i++;
