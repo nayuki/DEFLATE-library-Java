@@ -137,7 +137,7 @@ public final class Open implements State {
 			assert 0 <= numBytes && numBytes <= 8;
 			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8)
 				inputBitBuffer |= (inputBuffer.get() & 0xFFL) << inputBitBufferLength;
-			assert 0 <= inputBitBufferLength && inputBitBufferLength <= 64;  // Can temporarily be 64
+			assert isBitBufferValid();
 		}
 		
 		// Extract the bits to return
@@ -145,16 +145,14 @@ public final class Open implements State {
 		assert result >>> numBits == 0;
 		inputBitBuffer >>>= numBits;
 		inputBitBufferLength -= numBits;
-		
-		// Recheck invariants
 		assert isBitBufferValid();
 		return result;
 	}
 	
 	
 	private boolean isBitBufferValid() {
-		return 0 <= inputBitBufferLength && inputBitBufferLength <= 63
-			&& inputBitBuffer >>> inputBitBufferLength == 0;
+		return 0 <= inputBitBufferLength && inputBitBufferLength <= 64
+			&& (inputBitBufferLength == 64 || inputBitBuffer >>> inputBitBufferLength == 0);
 	}
 	
 	
@@ -452,7 +450,7 @@ public final class Open implements State {
 								inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
 							break;
 					}
-					// inputBitBufferLength can temporarily be 64
+					assert isBitBufferValid();
 				}
 				
 				int run, dist;
