@@ -125,8 +125,7 @@ public final class Open implements State {
 	private int readBits(int numBits) throws IOException {
 		// Check arguments and invariants
 		assert 1 <= numBits && numBits <= 16;  // Note: DEFLATE uses up to 16, but this method is correct up to 31
-		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
-		assert inputBitBuffer >>> inputBitBufferLength == 0;  // Ensure high-order bits are clean
+		assert isBitBufferValid();
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
 		while (inputBitBufferLength < numBits) {
@@ -148,9 +147,14 @@ public final class Open implements State {
 		inputBitBufferLength -= numBits;
 		
 		// Recheck invariants
-		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
-		assert inputBitBuffer >>> inputBitBufferLength == 0;
+		assert isBitBufferValid();
 		return result;
+	}
+	
+	
+	private boolean isBitBufferValid() {
+		return 0 <= inputBitBufferLength && inputBitBufferLength <= 63
+			&& inputBitBuffer >>> inputBitBufferLength == 0;
 	}
 	
 	
@@ -173,9 +177,11 @@ public final class Open implements State {
 	
 	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
 	private void alignInputToByte() {
+		assert isBitBufferValid();
 		int n = inputBitBufferLength & 7;
 		inputBitBuffer >>>= n;
 		inputBitBufferLength -= n;
+		assert isBitBufferValid();
 		assert inputBitBufferLength % 8 == 0;
 	}
 	
@@ -231,9 +237,7 @@ public final class Open implements State {
 				throw new AssertionError("Unreachable state");
 			
 			// Check bit buffer invariants
-			if (inputBitBufferLength < 0 || inputBitBufferLength > 63
-					|| inputBitBuffer >>> inputBitBufferLength != 0)
-				throw new AssertionError("Invalid input bit buffer state");
+			assert isBitBufferValid();
 			assert inputBitBufferLength % 8 == 0;
 			
 			len = Math.min(numRemainingBytes, len);
@@ -415,7 +419,7 @@ public final class Open implements State {
 			
 			while (index < end) {
 				assert numPendingOutputBytes == 0;
-				assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
+				assert isBitBufferValid();
 				
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 				if (inputBitBufferLength < maxBitsPerIteration) {
@@ -448,6 +452,7 @@ public final class Open implements State {
 								inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
 							break;
 					}
+					// inputBitBufferLength can temporarily be 64
 				}
 				
 				int run, dist;
@@ -468,6 +473,7 @@ public final class Open implements State {
 							inputBitBufferLength--;
 						}
 						sym = ~node;
+						assert isBitBufferValid();
 					}
 					
 					// Handle the symbol by ranges
@@ -524,6 +530,7 @@ public final class Open implements State {
 							inputBitBuffer >>>= numExtraBits;
 							inputBitBufferLength -= numExtraBits;
 						}
+						assert isBitBufferValid();
 						
 					} else {  // sym == 256, end of block
 						isDone = true;
@@ -604,6 +611,7 @@ public final class Open implements State {
 				} else  // Slow path with potential I/O operations
 					node = codeTree[node + readBits(1)];
 			}
+			assert isBitBufferValid();
 			return ~node;  // Symbol was encoded as bitwise complement
 		}
 		
