@@ -425,30 +425,30 @@ public final class Open implements State {
 					int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
 					assert 0 <= numBytes && numBytes <= 8;
 					switch (numBytes) {  // Only implement special cases that occur frequently in practice
-						case 2:
+						case 2 -> {
 							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBufferLength;
 							inputBitBufferLength += 2 * 8;
-							break;
-						case 3:
+						}
+						case 3 -> {
 							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBufferLength;
 							inputBitBufferLength += 3 * 8;
-							break;
-						case 4:
+						}
+						case 4 -> {
 							inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
 							inputBitBufferLength += 4 * 8;
-							break;
-						case 5:
+						}
+						case 5 -> {
 							inputBitBuffer |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32) << inputBitBufferLength;
 							inputBitBufferLength += 5 * 8;
-							break;
-						case 6:
+						}
+						case 6 -> {
 							inputBitBuffer |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32 | (c.get()&0xFFL)<<40) << inputBitBufferLength;
 							inputBitBufferLength += 6 * 8;
-							break;
-						default:  // This slower general logic is valid for 0 <= numBytes <= 8
+						}
+						default -> {  // This slower general logic is valid for 0 <= numBytes <= 8
 							for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
 								inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
-							break;
+						}
 					}
 					assert isBitBufferValid();
 				}
