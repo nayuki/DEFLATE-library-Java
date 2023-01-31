@@ -88,12 +88,12 @@ public final class Open implements State {
 					case 3 -> throw new DataFormatException("Reserved block type");
 					default -> throw new AssertionError("Unreachable value");
 				});
-			} else {
-				BlockDecoder dec = blockDecoder.get();
-				result += dec.read(b, off + result, len - result);
-				if (dec.isDone())
-					blockDecoder = Optional.empty();
 			}
+			
+			BlockDecoder dec = blockDecoder.get();
+			result += dec.read(b, off + result, len - result);
+			if (dec.isDone())
+				blockDecoder = Optional.empty();
 		}
 		return (result > 0 || blockDecoder.isPresent() || !isLastBlock) ? result : -1;
 	}
