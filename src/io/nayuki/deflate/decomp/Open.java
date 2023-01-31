@@ -171,9 +171,9 @@ public final class Open implements State {
 	
 	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
 	private void alignInputToByte() {
-		int discard = inputBitBufferLength & 7;
-		inputBitBuffer >>>= discard;
-		inputBitBufferLength -= discard;
+		int n = inputBitBufferLength & 7;
+		inputBitBuffer >>>= n;
+		inputBitBufferLength -= n;
 		assert inputBitBufferLength % 8 == 0;
 	}
 	
