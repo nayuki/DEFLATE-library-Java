@@ -676,72 +676,55 @@ public final class Open implements State {
 		 * the other internal node is located at index 2.
 		 */
 		private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
-			final short CODE_TREE_UNUSED_SLOT = 0x7000;
-			final short CODE_TREE_OPEN_SLOT   = 0x7002;
+			var codeLengthsAndSymbols = new short[codeLengths.length];
+			for (int i = 0; i < codeLengths.length; i++) {
+				byte cl = codeLengths[i];
+				if (cl < 0)
+					throw new IllegalArgumentException("Negative code length");
+				if (cl > 15)
+					throw new AssertionError("Maximum code length exceeds DEFLATE specification");
+				int pair = cl << 11 | i;  // uint15
+				assert pair >>> 15 == 0;
+				codeLengthsAndSymbols[i] = (short)pair;
+			}
+			Arrays.sort(codeLengthsAndSymbols);
 			
-			if (codeLengths.length < 2)
-				throw new IllegalArgumentException("This canonical code produces an under-full Huffman code tree");
-			if (codeLengths.length > 16385)  // Because some indexes would overflow int16
+			int codeLenSymIndex = 0;
+			// Skip unused symbols (code length 0)
+			while (codeLenSymIndex < codeLengthsAndSymbols.length && codeLengthsAndSymbols[codeLenSymIndex] >>> 11 == 0)
+				codeLenSymIndex++;
+			
+			int numCodes = codeLengthsAndSymbols.length - codeLenSymIndex;
+			if (numCodes < 2)
+				throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
+			if (numCodes > 16385)  // Because some indexes would overflow int16
 				throw new IllegalArgumentException("Too many codes");
 			
-			// Allocate array for the worst case if all symbols are present
-			var result = new short[(codeLengths.length - 1) * 2];
-			Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
-			result[0] = CODE_TREE_OPEN_SLOT;
-			result[1] = CODE_TREE_OPEN_SLOT;
-			int allocated = 2;  // Always even in this algorithm
-			
-			int maxCodeLen = 0;
-			for (byte cl : codeLengths) {
-				assert 0 <= cl && cl <= 15;
-				maxCodeLen = Math.max(cl, maxCodeLen);
-			}
-			if (maxCodeLen > 15)
-				throw new AssertionError("Maximum code length exceeds DEFLATE specification");
-			
-			// Allocate Huffman tree nodes according to ascending code lengths
-			for (int curCodeLen = 1; curCodeLen <= maxCodeLen; curCodeLen++) {
-				// Loop invariant: Each OPEN child slot in the result array has depth curCodeLen
-				
-				// Allocate all symbols of current code length to open slots in ascending order
-				int resultIndex = 0;
-				for (int symbol = 0; ; ) {
-					// Find next symbol having current code length
-					while (symbol < codeLengths.length && codeLengths[symbol] != curCodeLen)
-						symbol++;
-					if (symbol == codeLengths.length)
-						break;  // No more symbols to process
-					
-					// Find next open child slot
-					while (resultIndex < allocated && result[resultIndex] != CODE_TREE_OPEN_SLOT)
-						resultIndex++;
-					if (resultIndex == allocated)  // No more slots left
-						throw new DataFormatException("This canonical code produces an over-full Huffman code tree");
-					
-					// Put the symbol into the slot and increment
-					result[resultIndex] = (short)~symbol;
-					resultIndex++;
-					symbol++;
-				}
-				
-				// Take all open slots and deepen them by one level
-				for (int end = allocated; resultIndex < end; resultIndex++) {
-					if (result[resultIndex] == CODE_TREE_OPEN_SLOT) {
-						// Allocate a new node
-						assert allocated + 2 <= result.length;
-						result[resultIndex] = (short)allocated;
-						result[allocated + 0] = CODE_TREE_OPEN_SLOT;
-						result[allocated + 1] = CODE_TREE_OPEN_SLOT;
-						allocated += 2;
+			var result = new short[(numCodes - 1) * 2];
+			int resultNext = 0;
+			int resultEnd = 2;  // Start with root node already allocated; always even
+			int curCodeLen = 1;
+			for (; codeLenSymIndex < codeLengthsAndSymbols.length; codeLenSymIndex++) {
+				int pair = codeLengthsAndSymbols[codeLenSymIndex];
+				for (int codeLen = pair >>> 11; curCodeLen < codeLen; curCodeLen++) {
+					// Double every open slot
+					for (int end = resultEnd; resultNext < end; resultNext++) {
+						if (resultEnd >= result.length)
+							throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
+						result[resultNext] = (short)resultEnd;
+						resultEnd += 2;
 					}
 				}
+				if (resultNext >= resultEnd)
+					throw new DataFormatException("This canonical code produces an over-full Huffman code tree");
+				int symbol = pair & ((1 << 11) - 1);
+				result[resultNext] = (short)~symbol;
+				resultNext++;
 			}
-			
-			// Check for unused open slots after all symbols are allocated
-			for (int i = 0; i < allocated; i++) {
-				if (result[i] == CODE_TREE_OPEN_SLOT)
-					throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
-			}
+			if (resultEnd != result.length)
+				throw new AssertionError("Unreachable state");
+			if (resultNext < resultEnd)
+				throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
 			return result;
 		}
 		
