@@ -395,11 +395,8 @@ public final class Open implements State {
 			final int end = off + len;
 			assert off <= end && end <= b.length;
 			
-			for (; numPendingOutputBytes > 0; numPendingOutputBytes--, index++) {
-				if (index >= end)
-					return index - off;
+			for (; numPendingOutputBytes > 0 && index < end; numPendingOutputBytes--, index++)
 				b[index] = dictionary[(dictionaryIndex - numPendingOutputBytes) & DICTIONARY_MASK];
-			}
 			
 			while (index < end) {
 				assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
