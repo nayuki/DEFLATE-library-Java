@@ -360,7 +360,7 @@ public final class Open implements State {
 				int maxBitsPerLitLen = 0;
 				for (int sym = 0; sym < litLenCodeLen.length; sym++) {
 					int numBits = litLenCodeLen[sym];
-					if (numBits > 0 && sym >= 257)
+					if (sym >= 257 && numBits > 0)
 						numBits += RUN_LENGTH_TABLE[sym - 257] & 0x7;  // Extra bits
 					maxBitsPerLitLen = Math.max(numBits, maxBitsPerLitLen);
 				}
@@ -556,7 +556,7 @@ public final class Open implements State {
 				assert 3 <= run && run <= MAX_RUN_LENGTH;
 				assert 1 <= dist && dist <= 32768;
 				int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
-				if (end - index >= run) {  // Nice case with less branching
+				if (run <= end - index) {  // Nice case with less branching
 					for (int i = 0; i < run; i++) {
 						byte bb = dictionary[dictReadIndex];
 						dictionary[dictionaryIndex] = bb;
