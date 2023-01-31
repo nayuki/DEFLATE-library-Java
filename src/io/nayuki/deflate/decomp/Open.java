@@ -672,6 +672,11 @@ public final class Open implements State {
 			final short CODE_TREE_UNUSED_SLOT = 0x7000;
 			final short CODE_TREE_OPEN_SLOT   = 0x7002;
 			
+			if (codeLengths.length < 2)
+				throw new IllegalArgumentException("This canonical code produces an under-full Huffman code tree");
+			if (codeLengths.length > 16385)  // Because some indexes would overflow int16
+				throw new IllegalArgumentException("Too many codes");
+			
 			// Allocate array for the worst case if all symbols are present
 			var result = new short[(codeLengths.length - 1) * 2];
 			Arrays.fill(result, CODE_TREE_UNUSED_SLOT);
@@ -704,7 +709,7 @@ public final class Open implements State {
 					while (resultIndex < allocated && result[resultIndex] != CODE_TREE_OPEN_SLOT)
 						resultIndex++;
 					if (resultIndex == allocated)  // No more slots left
-						throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
+						throw new DataFormatException("This canonical code produces an over-full Huffman code tree");
 					
 					// Put the symbol into the slot and increment
 					result[resultIndex] = (short)~symbol;
@@ -728,7 +733,7 @@ public final class Open implements State {
 			// Check for unused open slots after all symbols are allocated
 			for (int i = 0; i < allocated; i++) {
 				if (result[i] == CODE_TREE_OPEN_SLOT)
-					throw new DataFormatException("Canonical code fails to produce full Huffman code tree");
+					throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
 			}
 			return result;
 		}
