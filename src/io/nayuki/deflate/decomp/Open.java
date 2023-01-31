@@ -191,6 +191,13 @@ public final class Open implements State {
 	// This is why the above must be a power of 2.
 	private static final int DICTIONARY_MASK = DICTIONARY_LENGTH - 1;
 	
+	static {
+		if (DICTIONARY_LENGTH < 32 * 1024)
+			throw new AssertionError("Dictionary length shorter than required by the specification");
+		if (Integer.bitCount(DICTIONARY_LENGTH) != 1)
+			throw new AssertionError("Dictionary length not a power of 2");  // Required for mask-based modulo calculation
+	}
+	
 	
 	
 	/*---- Block decoder types ----*/
@@ -776,6 +783,11 @@ public final class Open implements State {
 		private static final int CODE_TABLE_BITS = 9;
 		private static final int CODE_TABLE_MASK = (1 << CODE_TABLE_BITS) - 1;
 		
+		static {
+			if (!(1 <= CODE_TABLE_BITS && CODE_TABLE_BITS <= 15))
+				throw new AssertionError("Value out of range");
+		}
+		
 		
 		static {
 			var llcodelens = new byte[288];
@@ -799,6 +811,11 @@ public final class Open implements State {
 		
 		
 		private static final int MAX_RUN_LENGTH = 258;  // Required by the specification, do not modify
+		
+		static {
+			if (MAX_RUN_LENGTH - 1 > DICTIONARY_LENGTH)
+				throw new AssertionError("Cannot guarantee all pending run bytes can be buffered in dictionary");
+		}
 		
 		
 		// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i]
