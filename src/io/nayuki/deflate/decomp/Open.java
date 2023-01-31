@@ -49,14 +49,14 @@ public final class Open implements State {
 	
 	private Optional<BlockDecoder> blockDecoder = Optional.empty();
 	
-	// Indicates whether a block header with the "bfinal" flag has been seen.
+	// Indicates whether a block header with the `bfinal` flag has been seen.
 	// This starts as false, should eventually become true, and never changes back to false.
 	private boolean isLastBlock = false;
 	
 	
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
 	private final byte[] dictionary = new byte[DICTIONARY_LENGTH];
-	private int dictionaryIndex = 0;
+	private int dictionaryIndex = 0;  // Always in the range [0, dictionary.length)
 	
 	
 	
@@ -132,7 +132,7 @@ public final class Open implements State {
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
 		while (inputBitBufferLength < numBits) {
-			while (!inputBuffer.hasRemaining())  // Fill and retry
+			while (!inputBuffer.hasRemaining())
 				fillInputBuffer();
 			
 			// Pack as many bytes as possible from input byte buffer into the bit buffer
@@ -149,7 +149,7 @@ public final class Open implements State {
 		inputBitBuffer >>>= numBits;
 		inputBitBufferLength -= numBits;
 		
-		// Check return and recheck invariants
+		// Recheck invariants
 		assert result >>> numBits == 0;
 		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
 		assert inputBitBuffer >>> inputBitBufferLength == 0;
@@ -157,9 +157,8 @@ public final class Open implements State {
 	}
 	
 	
-	// Fills the input byte buffer with new data read from the underlying input stream.
-	// Requires the buffer to be fully consumed before being called. This method sets
-	// inputBufferLength to a value in the range [-1, inputBuffer.length] and inputBufferIndex to 0.
+	// Fills the empty input byte buffer with at least
+	// one new byte read from the underlying input stream.
 	private void fillInputBuffer() throws IOException {
 		if (inputBuffer.hasRemaining())
 			throw new AssertionError("Input buffer not fully consumed yet");
@@ -199,6 +198,7 @@ public final class Open implements State {
 	
 	private interface BlockDecoder {
 		
+		// Unlike InputStream.read(byte[]), this returns [0, len] but never -1.
 		public int read(byte[] b, int off, int len) throws IOException;
 		
 		public boolean isDone();
@@ -220,7 +220,6 @@ public final class Open implements State {
 		}
 		
 		
-		// Returns [0, len], never -1.
 		public int read(byte[] b, final int off, int len) throws IOException {
 			// Check bit buffer invariants
 			if (inputBitBufferLength < 0 || inputBitBufferLength > 63
@@ -240,7 +239,7 @@ public final class Open implements State {
 				inputBitBufferLength -= 8;
 			}
 			
-			// Read from input buffer
+			// Copy from input buffer
 			{
 				int n = Math.min(end - index, inputBuffer.remaining());
 				assert inputBitBufferLength == 0 || n == 0;
@@ -299,8 +298,8 @@ public final class Open implements State {
 			}
 			else {
 				// Read the current block's dynamic Huffman code tables from from the input
-				// buffers/stream, process the code lengths and computes the code trees, and ultimately
-				// set just the variables {literalLengthCodeTree, literalLengthCodeTable,
+				// buffers/stream, process the code lengths and computes the code trees, and
+				// ultimately set just the variables {literalLengthCodeTree, literalLengthCodeTable,
 				// distanceCodeTree, distanceCodeTable}. This might throw an IOException for actual I/O
 				// exceptions, unexpected end of stream, or a description of an invalid Huffman code.
 				int numLitLenCodes  = readBits(5) + 257;  // hlit  + 257
@@ -308,8 +307,8 @@ public final class Open implements State {
 				
 				// Read the code length code lengths
 				int numCodeLenCodes = readBits(4) +   4;  // hclen +   4
-				var codeLenCodeLen = new byte[19];  // This array is filled in a strange order
-				for (int i = 0; i < numCodeLenCodes; i++)
+				var codeLenCodeLen = new byte[19];
+				for (int i = 0; i < numCodeLenCodes; i++)  // Fill array in strange order
 					codeLenCodeLen[CODE_LENGTH_CODE_ORDER[i]] = (byte)readBits(3);
 				short[] codeLenCodeTree = codeLengthsToCodeTree(codeLenCodeLen);
 				
@@ -353,7 +352,7 @@ public final class Open implements State {
 				for (int sym = 0; sym < litLenCodeLen.length; sym++) {
 					int numBits = litLenCodeLen[sym];
 					if (numBits > 0 && sym >= 257)
-						numBits += RUN_LENGTH_TABLE[sym - 257] & 0x7;
+						numBits += RUN_LENGTH_TABLE[sym - 257] & 0x7;  // Extra bits
 					maxBitsPerLitLen = Math.max(numBits, maxBitsPerLitLen);
 				}
 				
@@ -361,13 +360,14 @@ public final class Open implements State {
 				byte[] distCodeLen = Arrays.copyOfRange(codeLens, numLitLenCodes, codeLens.length);
 				int maxBitsPerDist = 0;
 				if (distCodeLen.length == 1 && distCodeLen[0] == 0) {
-					distanceCodeTree = null;  // Empty distance code; the block shall be all literal symbols
+					// Empty distance code; the block shall be all literal symbols
+					distanceCodeTree = null;
 					distanceCodeTable = null;
 				} else {
 					for (int sym = 0; sym < distCodeLen.length; sym++) {
 						int numBits = distCodeLen[sym];
 						if (numBits > 0 && sym < DISTANCE_TABLE.length)
-							numBits += DISTANCE_TABLE[sym] & 0xF;
+							numBits += DISTANCE_TABLE[sym] & 0xF;  // Extra bits
 						maxBitsPerDist = Math.max(numBits, maxBitsPerDist);
 					}
 					
@@ -396,7 +396,6 @@ public final class Open implements State {
 		}
 		
 		
-		// Returns [0, len], never -1.
 		public int read(byte[] b, final int off, final int len) throws IOException {
 			int index = off;
 			final int end = off + len;
@@ -446,8 +445,7 @@ public final class Open implements State {
 				
 				int run, dist;
 				
-				// This allows us to do decoding entirely from the bit buffer, avoiding the byte buffer or actual I/O.
-				if (inputBitBufferLength >= maxBitsPerIteration) {  // Fast path
+				if (inputBitBufferLength >= maxBitsPerIteration) {  // Fast path entirely from bit buffer
 					// Decode next literal/length symbol (a customized version of decodeSymbol())
 					final int sym;
 					{
@@ -621,7 +619,7 @@ public final class Open implements State {
 		}
 		
 		
-		// Takes the given run length symbol in the range [0, 31], possibly reads
+		// Takes the given distance symbol in the range [0, 31], possibly reads
 		// some more input bits, and returns a number in the range [1, 32768].
 		// This throws an IOException if bits needed to be read but the end of
 		// stream was reached or the underlying stream experienced an I/O exception.
@@ -642,8 +640,8 @@ public final class Open implements State {
 		 * A symbol code length is either zero (absent from the tree) or a positive integer.
 		 * 
 		 * A code tree is an array of integers, where each pair represents a node.
-		 * Each pair is adjacent and starts on an even index. The first element of
-		 * the pair represents the left child and the second element represents the
+		 * Each pair is adjacent and starts on an even index. The earlier element of
+		 * the pair represents the left child and the later element represents the
 		 * right child. The root node is at index 0. If an element is non-negative,
 		 * then it is the index of the child node in the array. Otherwise it is the
 		 * bitwise complement of the leaf symbol. This tree is used in decodeSymbol()
@@ -651,15 +649,17 @@ public final class Open implements State {
 		 * used, nor do used elements need to be contiguous.
 		 * 
 		 * For example, this Huffman tree:
-		 *        o
-		 *       / \
-		 *      o   \
-		 *     / \   \
-		 *   'a' 'b' 'c'
+		 *          /\
+		 *         0  1
+		 *        /    \
+		 *       /\    'c'
+		 *      0  1
+		 *     /    \
+		 *   'a'    'b'
 		 * is serialized as this array:
-		 *   {2, ~'c', ~'a', ~'b'}
-		 * because the root is located at index 0 and the other internal node is
-		 * located at index 2.
+		 *   [2, ~'c', ~'a', ~'b']
+		 * because the root is located at index 0 and
+		 * the other internal node is located at index 2.
 		 */
 		private static short[] codeLengthsToCodeTree(byte[] codeLengths) throws DataFormatException {
 			// Allocate array for the worst case if all symbols are present
@@ -730,7 +730,7 @@ public final class Open implements State {
 		 * decoding starting from the root and consuming the bits of i starting from
 		 * the lowest-order bits.
 		 * 
-		 * Each array element encodes (numBitsConsumed << 11) | (node & 0x7FF), where:
+		 * Each array element encodes (numBitsConsumed << 11) | (node & ((1<<11)-1), where:
 		 * - numBitsConsumed is a 4-bit unsigned integer in the range [1, CODE_TABLE_BITS].
 		 * - node is an 11-bit signed integer representing either the current node
 		 *   (which is a non-negative number) after consuming all the available bits
@@ -749,8 +749,8 @@ public final class Open implements State {
 					consumed++;
 				} while (node >= 0 && consumed < CODE_TABLE_BITS);
 				
-				assert 1 <= consumed && consumed <= 15;  // 4 bits unsigned
-				assert -1024 <= node && node <= 1023;  // 11 bits signed
+				assert 1 <= consumed && consumed <= 15;  // uint4
+				assert -1024 <= node && node <= 1023;  // int11
 				result[i] = (short)(consumed << 11 | (node & 0x7FF));
 				assert result[i] >= 0;
 			}
