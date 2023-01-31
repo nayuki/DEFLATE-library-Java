@@ -135,20 +135,19 @@ public final class Open implements State {
 			
 			// Pack as many bytes as possible from input byte buffer into the bit buffer
 			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
-			if (numBytes <= 0)
-				throw new AssertionError("Impossible state");
+			assert 0 <= numBytes && numBytes <= 8;
 			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8)
 				inputBitBuffer |= (inputBuffer.get() & 0xFFL) << inputBitBufferLength;
-			assert inputBitBufferLength <= 64;  // Can temporarily be 64
+			assert 0 <= inputBitBufferLength && inputBitBufferLength <= 64;  // Can temporarily be 64
 		}
 		
 		// Extract the bits to return
 		int result = (int)inputBitBuffer & ((1 << numBits) - 1);
+		assert result >>> numBits == 0;
 		inputBitBuffer >>>= numBits;
 		inputBitBufferLength -= numBits;
 		
 		// Recheck invariants
-		assert result >>> numBits == 0;
 		assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
 		assert inputBitBuffer >>> inputBitBufferLength == 0;
 		return result;
@@ -221,10 +220,14 @@ public final class Open implements State {
 		
 		
 		public int read(byte[] b, final int off, int len) throws IOException {
+			if (numRemainingBytes < 0)
+				throw new AssertionError("Unreachable state");
+			
 			// Check bit buffer invariants
 			if (inputBitBufferLength < 0 || inputBitBufferLength > 63
 					|| inputBitBuffer >>> inputBitBufferLength != 0)
 				throw new AssertionError("Invalid input bit buffer state");
+			assert inputBitBufferLength % 8 == 0;
 			
 			len = Math.min(numRemainingBytes, len);
 			numRemainingBytes -= len;
@@ -266,6 +269,8 @@ public final class Open implements State {
 		
 		
 		public boolean isDone() {
+			if (numRemainingBytes < 0)
+				throw new AssertionError("Unreachable state");
 			return numRemainingBytes == 0;
 		}
 		
@@ -402,6 +407,7 @@ public final class Open implements State {
 				b[index] = dictionary[(dictionaryIndex - numPendingOutputBytes) & DICTIONARY_MASK];
 			
 			while (index < end) {
+				assert numPendingOutputBytes == 0;
 				assert 0 <= inputBitBufferLength && inputBitBufferLength <= 63;
 				
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
@@ -742,6 +748,7 @@ public final class Open implements State {
 				int node = 0;
 				int consumed = 0;
 				do {
+					assert node % 2 == 0;
 					node = codeTree[node + ((i >>> consumed) & 1)];
 					consumed++;
 				} while (node >= 0 && consumed < CODE_TABLE_BITS);
