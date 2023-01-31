@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Optional;
 import io.nayuki.deflate.DataFormatException;
 
 
@@ -46,7 +47,7 @@ public final class Open implements State {
 	private int inputBitBufferLength = 0;  // Always in the range [0, 63]
 	
 	
-	private Substate substate = BetweenBlocks.SINGLETON;
+	private Optional<BlockDecoder> blockDecoder = Optional.empty();
 	
 	// Indicates whether a block header with the "bfinal" flag has been seen.
 	// This starts as false, should eventually become true, and never changes back to false.
@@ -75,32 +76,28 @@ public final class Open implements State {
 		int result = 0;  // Number of bytes filled in the array `b`
 		
 		while (result < len) {
-			if (substate instanceof BetweenBlocks) {
+			if (blockDecoder.isEmpty()) {  // Between blocks
 				if (isLastBlock)
 					break;
 				
 				// Read and process the block header
 				isLastBlock = readBits(1) == 1;
-				substate = switch (readBits(2)) {  // Type
+				blockDecoder = Optional.of(switch (readBits(2)) {  // Type
 					case 0 -> new UncompressedBlock();
 					case 1 -> new HuffmanBlock(false);
 					case 2 -> new HuffmanBlock(true);
 					case 3 -> throw new DataFormatException("Reserved block type");
 					default -> throw new AssertionError("Unreachable value");
-				};
-			} else if (substate instanceof UncompressedBlock st) {
-				result += st.read(b, off + result, len - result);
-				if (st.isDone())
-					substate = BetweenBlocks.SINGLETON;
-			} else if (substate instanceof HuffmanBlock st) {
-				result += st.read(b, off + result, len - result);
-				if (st.isDone())
-					substate = BetweenBlocks.SINGLETON;
-			} else
-				throw new AssertionError("Unreachable type");
+				});
+			} else {
+				BlockDecoder dec = blockDecoder.get();
+				result += dec.read(b, off + result, len - result);
+				if (dec.isDone())
+					blockDecoder = Optional.empty();
+			}
 		}
 		
-		return result > 0 || !(substate instanceof BetweenBlocks) || !isLastBlock ? result : -1;
+		return (result > 0 || blockDecoder.isPresent() || !isLastBlock) ? result : -1;
 	}
 	
 	
@@ -198,17 +195,18 @@ public final class Open implements State {
 	
 	
 	
-	/*---- Substate types ----*/
+	/*---- Block decoder types ----*/
 	
-	private interface Substate {}
+	private interface BlockDecoder {
+		
+		public int read(byte[] b, int off, int len) throws IOException;
+		
+		public boolean isDone();
+		
+	}
 	
 	
-	
-	private enum BetweenBlocks implements Substate { SINGLETON }
-	
-	
-	
-	private final class UncompressedBlock implements Substate {
+	private final class UncompressedBlock implements BlockDecoder {
 		
 		private int numRemainingBytes;  // Non-negative
 		
@@ -223,7 +221,7 @@ public final class Open implements State {
 		
 		
 		// Returns [0, len], never -1.
-		private int read(byte[] b, final int off, int len) throws IOException {
+		public int read(byte[] b, final int off, int len) throws IOException {
 			// Check bit buffer invariants
 			if (inputBitBufferLength < 0 || inputBitBufferLength > 63
 					|| inputBitBuffer >>> inputBitBufferLength != 0)
@@ -279,7 +277,7 @@ public final class Open implements State {
 	
 	
 	
-	private final class HuffmanBlock implements Substate {
+	private final class HuffmanBlock implements BlockDecoder {
 		
 		private final short[] literalLengthCodeTree;   // Not null
 		private final short[] literalLengthCodeTable;  // Derived from literalLengthCodeTree; not null
