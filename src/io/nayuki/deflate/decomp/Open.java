@@ -13,6 +13,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Optional;
 import io.nayuki.deflate.DataFormatException;
@@ -32,7 +33,8 @@ public final class Open implements State {
 	
 	// The typical data flow in this decompressor looks like:
 	//   input (the underlying input stream) -> input.read()
-	//   -> inputBuffer -> packing logic in readBits()
+	//   -> inputBuffer -> getLong()
+	//   -> inputButBuffer1 -> packing logic in readBits()
 	//   -> inputBitBuffer0 -> readBit() or equivalent
 	//   -> Huffman decoding logic for literal and length-distance symbols
 	//   -> LZ77 decoding logic -> dictionary
@@ -45,6 +47,9 @@ public final class Open implements State {
 	// Buffer of bits packed from the bytes in `inputBuffer`
 	private long inputBitBuffer0 = 0;       // Always in the range [0, 2^inputBitBuffer0Length)
 	private int inputBitBuffer0Length = 0;  // Always in the range [0, 64]
+	
+	private long inputBitBuffer1 = 0;       // Always in the range [0, 2^inputBitBuffer1Length)
+	private int inputBitBuffer1Length = 0;  // Always in the range [0, 64]
 	
 	
 	private Optional<BlockDecoder> blockDecoder = Optional.empty();
@@ -65,7 +70,8 @@ public final class Open implements State {
 	public Open(InputStream in, boolean detachable, int inBufLen) {
 		input = in;
 		isDetachable = detachable;
-		inputBuffer = ByteBuffer.allocate(inBufLen).position(0).limit(0);
+		inputBuffer = ByteBuffer.allocate(inBufLen)
+			.order(ByteOrder.LITTLE_ENDIAN).position(0).limit(0);
 	}
 	
 	
@@ -106,7 +112,7 @@ public final class Open implements State {
 		// Rewind the underlying stream, then skip over bytes that were already consumed.
 		// Note that a byte with some bits consumed is considered to be fully consumed.
 		input.reset();
-		int skip = inputBuffer.position() - inputBitBuffer0Length / 8;
+		int skip = inputBuffer.position() - (inputBitBuffer0Length + inputBitBuffer1Length) / 8;
 		assert skip >= 0;
 		new DataInputStream(input).skipNBytes(skip);
 	}
@@ -129,15 +135,23 @@ public final class Open implements State {
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
 		while (inputBitBuffer0Length < numBits) {
-			if (!inputBuffer.hasRemaining())
-				fillInputBuffer();
-			
-			// Pack as many bytes as possible from input byte buffer into the bit buffer
-			int numBytes = Math.min((64 - inputBitBuffer0Length) >>> 3, inputBuffer.remaining());
-			assert 0 <= numBytes && numBytes <= 8;
-			for (int i = 0; i < numBytes; i++, inputBitBuffer0Length += 8)
-				inputBitBuffer0 |= (inputBuffer.get() & 0xFFL) << inputBitBuffer0Length;
-			assert isBitBufferValid();
+			if (inputBitBuffer1Length > 0) {
+				int n = Math.min(64 - inputBitBuffer0Length, inputBitBuffer1Length);
+				inputBitBuffer0 |= inputBitBuffer1 << inputBitBuffer0Length;
+				inputBitBuffer0Length += n;
+				inputBitBuffer1 >>>= n;
+				inputBitBuffer1Length -= n;
+			} else {
+				if (!inputBuffer.hasRemaining())
+					fillInputBuffer();
+				
+				// Pack as many bytes as possible from input byte buffer into the bit buffer
+				int numBytes = Math.min((64 - inputBitBuffer0Length) >>> 3, inputBuffer.remaining());
+				assert 0 <= numBytes && numBytes <= 8;
+				for (int i = 0; i < numBytes; i++, inputBitBuffer0Length += 8)
+					inputBitBuffer0 |= (inputBuffer.get() & 0xFFL) << inputBitBuffer0Length;
+				assert isBitBufferValid();
+			}
 		}
 		
 		// Extract the bits to return
@@ -427,33 +441,26 @@ public final class Open implements State {
 				
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
 				if (inputBitBuffer0Length < maxBitsPerIteration) {
-					ByteBuffer c = inputBuffer;  // Shorter name
-					int numBytes = Math.min((64 - inputBitBuffer0Length) >>> 3, inputBuffer.remaining());
-					assert 0 <= numBytes && numBytes <= 8;
-					switch (numBytes) {  // Only implement special cases that occur frequently in practice
-						case 2 -> {
-							inputBitBuffer0 |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBuffer0Length;
-							inputBitBuffer0Length += 2 * 8;
-						}
-						case 3 -> {
-							inputBitBuffer0 |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBuffer0Length;
-							inputBitBuffer0Length += 3 * 8;
-						}
-						case 4 -> {
-							inputBitBuffer0 |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBuffer0Length;
-							inputBitBuffer0Length += 4 * 8;
-						}
-						case 5 -> {
-							inputBitBuffer0 |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32) << inputBitBuffer0Length;
-							inputBitBuffer0Length += 5 * 8;
-						}
-						case 6 -> {
-							inputBitBuffer0 |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32 | (c.get()&0xFFL)<<40) << inputBitBuffer0Length;
-							inputBitBuffer0Length += 6 * 8;
-						}
-						default -> {  // This slower general logic is valid for 0 <= numBytes <= 8
-							for (int j = 0; j < numBytes; j++, inputBitBuffer0Length += 8)
-								inputBitBuffer0 |= (c.get() & 0xFFL) << inputBitBuffer0Length;
+					if (inputBitBuffer1Length > 0) {
+						int n = Math.min(64 - inputBitBuffer0Length, inputBitBuffer1Length);
+						inputBitBuffer0 |= inputBitBuffer1 << inputBitBuffer0Length;
+						inputBitBuffer0Length += n;
+						inputBitBuffer1 >>>= n;
+						inputBitBuffer1Length -= n;
+					}
+					if (inputBitBuffer0Length < maxBitsPerIteration) {
+						assert inputBitBuffer1Length == 0;
+						if (inputBuffer.remaining() >= 8) {
+							inputBitBuffer1 = inputBuffer.getLong();
+							inputBitBuffer1Length = 64;
+							int n = Math.min(64 - inputBitBuffer0Length, inputBitBuffer1Length);
+							inputBitBuffer0 |= inputBitBuffer1 << inputBitBuffer0Length;
+							inputBitBuffer0Length += n;
+							inputBitBuffer1 >>>= n;
+							inputBitBuffer1Length -= n;
+						} else {
+							for (; inputBitBuffer0Length <= 56 && inputBuffer.hasRemaining(); inputBitBuffer0Length += 8)
+								inputBitBuffer0 |= (inputBuffer.get() & 0xFFL) << inputBitBuffer0Length;
 						}
 					}
 					assert isBitBufferValid();
