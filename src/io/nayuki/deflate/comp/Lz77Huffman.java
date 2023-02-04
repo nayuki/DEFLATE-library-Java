@@ -76,7 +76,7 @@ public record Lz77Huffman(
 						int run = 0;
 						int historyIndex = index - dist;
 						int dataIndex = index;
-						for (; run <= searchMaximumRunLength && dataIndex < end && b[dataIndex] == b[historyIndex]; run++, dataIndex++) {
+						for (; run < searchMaximumRunLength && dataIndex < end && b[dataIndex] == b[historyIndex]; run++, dataIndex++) {
 							historyIndex++;
 							if (historyIndex == index)
 								historyIndex -= dist;
