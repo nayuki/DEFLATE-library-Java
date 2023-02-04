@@ -152,6 +152,60 @@ public record GzipMetadata(
 	
 	
 	
+	/*---- Method ----*/
+	
+	public void write(OutputStream out) throws IOException {
+		Objects.requireNonNull(out);
+		var out1 = new CheckedOutputStream(out, new CRC32());
+		DataOutput out2 = new DataOutputStream(out1);
+		
+		out2.writeShort(0x1F8B);
+		
+		out2.writeByte(switch (compressionMethod) {
+			case DEFLATE -> 8;
+			default -> throw new AssertionError("Unreachable value");
+		});
+		
+		boolean[] flags = {
+			isFileText,
+			hasHeaderCrc,
+			extraField.isPresent(),
+			fileName.isPresent(),
+			comment.isPresent(),
+		};
+		assert flags.length <= 8;
+		int flagByte = 0;
+		for (int i = 0; i < flags.length; i++)
+			flagByte |= (flags[i] ? 1 : 0) << i;
+		out2.writeByte(flagByte);
+		
+		out2.writeInt(Integer.reverseBytes(modificationTimeUnixS.orElse(0)));
+		
+		out2.writeByte(extraFlags);
+		
+		out2.writeByte(switch (operatingSystem) {
+			case UNKNOWN -> 0xFF;
+			default -> operatingSystem.ordinal();
+		});
+		
+		if (extraField.isPresent()) {
+			byte[] b = extraField.get();
+			out2.writeShort(Integer.reverseBytes(b.length) >>> 16);
+			out2.write(b);
+		}
+		
+		if (fileName.isPresent())
+			out2.write((fileName.get() + "\0").getBytes(StandardCharsets.ISO_8859_1));
+		
+		if (comment.isPresent())
+			out2.write((comment.get() + "\0").getBytes(StandardCharsets.ISO_8859_1));
+		
+		if (hasHeaderCrc)
+			out2.writeShort(Integer.reverseBytes((int)out1.getChecksum().getValue()) >>> 16);
+	}
+	
+	
+	
 	/*---- Enumerations ----*/
 	
 	public enum CompressionMethod {
