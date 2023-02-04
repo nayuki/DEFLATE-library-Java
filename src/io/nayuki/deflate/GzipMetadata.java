@@ -99,10 +99,10 @@ public record GzipMetadata(
 		// Operating system
 		int operSystemInt = in2.readUnsignedByte();
 		OperatingSystem operSystem;
-		if (operSystemInt < OperatingSystem.values().length - 1)
+		if (operSystemInt < OperatingSystem.UNKNOWN.ordinal())
 			operSystem = OperatingSystem.values()[operSystemInt];
 		else if (operSystemInt == 0xFF)
-			operSystem = OperatingSystem.values()[OperatingSystem.values().length - 1];
+			operSystem = OperatingSystem.UNKNOWN;
 		else
 			throw new DataFormatException("Unsupported operating system value");
 		
@@ -173,6 +173,7 @@ public record GzipMetadata(
 		NTFS_FILESYSTEM,
 		QDOS,
 		ACORN_RISCOS,
+		
 		UNKNOWN,
 	}
 	
