@@ -19,7 +19,7 @@ import io.nayuki.deflate.MarkableFileInputStream;
 /**
  * Decompression application for the gzip file format.
  * <p>Usage: java gunzip InputFile.gz OutputFile</p>
- * <p>This decompresses a single gzip file into a single output file. The program also prints
+ * <p>This decompresses a single input gzip file into a single output file. The program also prints
  * some information to standard output, and error messages if the file is invalid/corrupt.</p>
  */
 public final class gunzip {
@@ -41,10 +41,12 @@ public final class gunzip {
 		
 		var inFile = new File(args[0]);
 		if (!inFile.exists())
-			return "Input file does not exist: " + inFile;
+			return "Input path does not exist: " + inFile;
 		if (inFile.isDirectory())
-			return "Input file is a directory: " + inFile;
+			return "Input path is a directory: " + inFile;
 		var outFile = new File(args[1]);
+		if (outFile.isDirectory())
+			return "Output path is a directory: " + outFile;
 		
 		try (var in = new GzipInputStream(new MarkableFileInputStream(inFile))) {
 			{
