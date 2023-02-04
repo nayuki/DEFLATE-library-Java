@@ -44,7 +44,7 @@ public final class Open implements State {
 	
 	// Buffer of bits packed from the bytes in `inputBuffer`
 	private long inputBitBuffer0 = 0;       // Always in the range [0, 2^inputBitBuffer0Length)
-	private int inputBitBuffer0Length = 0;  // Always in the range [0, 63]
+	private int inputBitBuffer0Length = 0;  // Always in the range [0, 64]
 	
 	
 	private Optional<BlockDecoder> blockDecoder = Optional.empty();
@@ -293,7 +293,7 @@ public final class Open implements State {
 		private final short[] literalLengthCodeTable;  // Derived from literalLengthCodeTree; not null
 		private final short[] distanceCodeTree;   // Can be null
 		private final short[] distanceCodeTable;  // Derived from distanceCodeTree; same nullness
-		private final int maxBitsPerIteration;  // In the range [2, 48]
+		private final int maxBitsPerIteration;  // In the range [1, 48]
 		
 		private int numPendingOutputBytes = 0;  // Always in the range [0, MAX_RUN_LENGTH-1]
 		private boolean isDone = false;
@@ -407,6 +407,9 @@ public final class Open implements State {
 				
 				maxBitsPerIteration = maxBitsPerLitLen + maxBitsPerDist;
 			}
+			
+			if (!(1 <= maxBitsPerIteration && maxBitsPerIteration <= 48))
+				throw new AssertionError("Unreachable value");
 		}
 		
 		
