@@ -18,8 +18,9 @@ import io.nayuki.deflate.decomp.StickyException;
 
 
 /**
- * Decompresses a DEFLATE data stream (raw format without
- * zlib or gzip headers or footers) into a byte stream.
+ * Decompresses a DEFLATE data stream (raw format without zlib or gzip headers or footers) into
+ * a byte stream. Objects only use memory and no operating system resources, so it is safe to discard
+ * these objects without calling {@link #close()} in order to continue using the underlying streams.
  * @see DeflaterOutputStream
  */
 public final class InflaterInputStream extends InputStream {
@@ -35,7 +36,8 @@ public final class InflaterInputStream extends InputStream {
 	/**
 	 * Constructs an inflater input stream over the specified underlying input stream. The
 	 * underlying stream must contain DEFLATE-compressed data with no headers or footers (e.g. must
-	 * be unwrapped from the zlib or gzip container formats). {@code detach()} cannot be called.
+	 * be unwrapped from the zlib or gzip container formats). When this inflater stream reaches the end,
+	 * the underlying stream will be at an unspecified position at or after the end of the DEFLATE data.
 	 * @param in the underlying input stream of raw DEFLATE-compressed data
 	 * @throws NullPointerException if the input stream is {@code null}
 	 */
@@ -46,17 +48,24 @@ public final class InflaterInputStream extends InputStream {
 	
 	/**
 	 * Constructs an inflater input stream over the specified underlying input stream,
-	 * and with the specified option for detachability. The underlying stream must
+	 * and with the specified option for ending exactly. The underlying stream must
 	 * contain DEFLATE-compressed data with no headers or footers (e.g. must be unwrapped
-	 * from the zlib or gzip container formats). Detachability allows {@link #detach()}
-	 * to be called, and requires the specified input stream to support marking.
+	 * from the zlib or gzip container formats). If ending exactly is requested, then
+	 * the underlying stream must support marking, and when this inflater stream reaches
+	 * the end, the underlying stream will be foremost byte position after the end of the
+	 * DEFLATE data. Otherwise (not ending exactly) when this inflater stream reaches the
+	 * end, the underlying stream will be at an unspecified position at or after the end
+	 * of the DEFLATE data. For end-exactly to be useful, discard this inflater stream
+	 * without calling {@link #close()} so that the underlying stream can still be used.
 	 * @param in the underlying input stream of raw DEFLATE-compressed data
-	 * @param detachable whether {@code detach()} can be called later
+	 * @param endExactly whether to position the underlying stream at the exact
+	 * position after the end of the DEFLATE data when this inflater stream ends
 	 * @throws NullPointerException if the input stream is {@code null}
-	 * @throws IllegalArgumentException if {@code detach == true} but {@code in.markSupported() == false}
+	 * @throws IllegalArgumentException if {@code endExactly
+	 * == true} but {@code in.markSupported() == false}
 	 */
-	public InflaterInputStream(InputStream in, boolean detachable) {
-		this(in, detachable, DEFAULT_INPUT_BUFFER_SIZE);
+	public InflaterInputStream(InputStream in, boolean endExactly) {
+		this(in, endExactly, DEFAULT_INPUT_BUFFER_SIZE);
 	}
 	
 	
@@ -65,27 +74,35 @@ public final class InflaterInputStream extends InputStream {
 	
 	/**
 	 * Constructs an inflater input stream over the specified underlying input stream,
-	 * with the specified options for detachability and input buffer size. The underlying
+	 * with the specified options for ending exactly and input buffer size. The underlying
 	 * stream must contain DEFLATE-compressed data with no headers or footers (e.g. must
-	 * be unwrapped from the zlib or gzip container formats). Detachability allows {@link
-	 * #detach()} to be called, and requires the specified input stream to support marking.
+	 * be unwrapped from the zlib or gzip container formats). If ending exactly is
+	 * requested, then the underlying stream must support marking, and when this inflater
+	 * stream reaches the end, the underlying stream will be foremost byte position after
+	 * the end of the DEFLATE data. Otherwise (not ending exactly) when this inflater
+	 * stream reaches the end, the underlying stream will be at an unspecified position
+	 * at or after the end of the DEFLATE data. For end-exactly to be useful, discard this
+	 * inflater stream without calling {@link #close()} so that the underlying stream can
+	 * still be used.
 	 * @param in the underlying input stream of raw DEFLATE-compressed data (not {@code null})
-	 * @param detachable whether {@code detach()} can be called later
+	 * @param endExactly whether to position the underlying stream at the exact
+	 * position after the end of the DEFLATE data when this inflater stream ends
 	 * @param inBufLen the size of the internal read buffer, which must be positive
 	 * @throws NullPointerException if the input stream is {@code null}
 	 * @throws IllegalArgumentException if {@code inBufLen < 1}
-	 * @throws IllegalArgumentException if {@code detach == true} but {@code in.markSupported() == false}
+	 * @throws IllegalArgumentException if {@code endExactly
+	 * == true} but {@code in.markSupported() == false}
 	 */
-	public InflaterInputStream(InputStream in, boolean detachable, int inBufLen) {
+	public InflaterInputStream(InputStream in, boolean endExactly, int inBufLen) {
 		Objects.requireNonNull(in);
 		if (inBufLen <= 0)
 			throw new IllegalArgumentException("Non-positive input buffer size");
-		if (detachable) {
+		if (endExactly) {
 			if (!in.markSupported())
 				throw new IllegalArgumentException("Input stream not markable, cannot support detachment");
 			in.mark(0);
 		}
-		state = new Open(in, detachable, inBufLen);
+		state = new Open(in, endExactly, inBufLen);
 	}
 	
 	
@@ -142,32 +159,6 @@ public final class InflaterInputStream extends InputStream {
 			throw st.exception();
 		else if (state instanceof Closed)
 			throw new IllegalStateException("Stream already closed");
-		else
-			throw new AssertionError("Unreachable type");
-	}
-	
-	
-	/**
-	 * Detaches the underlying input stream from this decompressor. This puts the underlying stream
-	 * at the position of the first byte after the data that this decompressor actually consumed.
-	 * Calling {@code detach()} invalidates this stream object but doesn't close the underlying stream.
-	 * <p>This method exists because for efficiency, the decompressor may read more bytes from the
-	 * underlying stream than necessary to produce the decompressed data. If you want to continue
-	 * reading the underlying stream exactly after the point the DEFLATE-compressed data ends,
-	 * then it is necessary to call this detach method.</p>
-	 * <p>This can only be called once, and is mutually exclusive with respect to calling
-	 * {@link #close()}. It is illegal to call {@link #read()} after detaching.</p>
-	 * @throws IllegalStateException if detach was already called or this stream has been closed
-	 * @throws IOException if an I/O exception occurs in the underlying stream
-	 */
-	public void detach() throws IOException {
-		if (state instanceof Open st) {
-			st.detach();
-			state = Closed.SINGLETON;
-		} else if (state instanceof StickyException st)
-			throw st.exception();
-		else if (state instanceof Closed)
-			throw new IllegalStateException("Input stream already detached/closed");
 		else
 			throw new AssertionError("Unreachable type");
 	}

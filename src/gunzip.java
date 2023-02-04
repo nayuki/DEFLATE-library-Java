@@ -140,7 +140,6 @@ public final class gunzip {
 				System.err.printf("Output speed: %.2f MB/s%n", outFile.length() / 1e6 / elapsedTime * 1.0e9);
 				
 				// Process gzip footer
-				iin.detach();
 				if (lcout.getCrc32() != readLittleEndianInt32(din))
 					return "Decompression CRC-32 mismatch";
 				if ((int)lcout.getLength() != readLittleEndianInt32(din))

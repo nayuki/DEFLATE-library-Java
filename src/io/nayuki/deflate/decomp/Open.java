@@ -28,7 +28,7 @@ public final class Open implements State {
 	
 	// Indicates whether mark() should be called when the underlying
 	// input stream is read, and whether calling detach() is allowed.
-	private final boolean isDetachable;
+	private final boolean endExactly;
 	
 	
 	// The typical data flow in this decompressor looks like:
@@ -67,9 +67,9 @@ public final class Open implements State {
 	
 	/*---- Constructor ----*/
 	
-	public Open(InputStream in, boolean detachable, int inBufLen) {
+	public Open(InputStream in, boolean endExact, int inBufLen) {
 		input = in;
-		isDetachable = detachable;
+		endExactly = endExact;
 		inputBuffer = ByteBuffer.allocate(inBufLen)
 			.order(ByteOrder.LITTLE_ENDIAN).position(0).limit(0);
 	}
@@ -98,17 +98,17 @@ public final class Open implements State {
 			
 			BlockDecoder dec = blockDecoder.get();
 			result += dec.read(b, off + result, len - result);
-			if (dec.isDone())
+			if (dec.isDone()) {
 				blockDecoder = Optional.empty();
+				if (isLastBlock && endExactly)
+					finish();
+			}
 		}
 		return (result > 0 || blockDecoder.isPresent() || !isLastBlock) ? result : -1;
 	}
 	
 	
-	public void detach() throws IOException {
-		if (!isDetachable)
-			throw new IllegalStateException("Detachability not specified at construction");
-		
+	private void finish() throws IOException {
 		// Rewind the underlying stream, then skip over bytes that were already consumed.
 		// Note that a byte with some bits consumed is considered to be fully consumed.
 		input.reset();
@@ -175,7 +175,7 @@ public final class Open implements State {
 	private void fillInputBuffer() throws IOException {
 		if (inputBuffer.hasRemaining())
 			throw new AssertionError("Input buffer not fully consumed yet");
-		if (isDetachable)
+		if (endExactly)
 			input.mark(inputBuffer.capacity());
 		int n = input.read(inputBuffer.array());
 		if (n == -1)
