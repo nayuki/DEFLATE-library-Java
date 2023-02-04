@@ -6,17 +6,13 @@
  * https://www.nayuki.io/page/deflate-library-java
  */
 
-import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Instant;
-import java.util.zip.CRC32;
+import io.nayuki.deflate.GzipInputStream;
 import io.nayuki.deflate.GzipMetadata;
-import io.nayuki.deflate.InflaterInputStream;
 import io.nayuki.deflate.MarkableFileInputStream;
 
 
@@ -50,9 +46,9 @@ public final class gunzip {
 			return "Input file is a directory: " + inFile;
 		var outFile = new File(args[1]);
 		
-		try (var in = new MarkableFileInputStream(inFile)) {
+		try (var in = new GzipInputStream(new MarkableFileInputStream(inFile))) {
 			{
-				GzipMetadata meta = GzipMetadata.read(in);
+				GzipMetadata meta = in.getMetadata();
 				
 				System.err.println("Last modified: " + meta.modificationTimeUnixS()
 					.map(t -> Instant.EPOCH.plusSeconds(t).toString()).orElse("N/A"));
@@ -92,84 +88,22 @@ public final class gunzip {
 					System.err.println("File name: " + s));
 				
 				meta.comment().ifPresent(s ->
-					System.err.println("Comment: " + s));
+				System.err.println("Comment: " + s));
 			}
 			
 			// Start decompressing and writing output file
-			try (OutputStream fout = new FileOutputStream(outFile)) {
-				var lcout = new LengthCrc32OutputStream(fout);
-				var iin = new InflaterInputStream(in, true);
-				var buf = new byte[64 * 1024];
-				long elapsedTime = -System.nanoTime();
-				while (true) {
-					int n = iin.read(buf);
-					if (n == -1)
-						break;
-					lcout.write(buf, 0, n);
-				}
-				elapsedTime += System.nanoTime();
-				System.err.printf("Input  speed: %.2f MB/s%n",  inFile.length() / 1e6 / elapsedTime * 1.0e9);
-				System.err.printf("Output speed: %.2f MB/s%n", outFile.length() / 1e6 / elapsedTime * 1.0e9);
-				
-				// Process gzip footer
-				DataInput din = new DataInputStream(in);
-				if (lcout.getCrc32() != readLittleEndianInt32(din))
-					return "Decompression CRC-32 mismatch";
-				if ((int)lcout.getLength() != readLittleEndianInt32(din))
-					return "Decompressed size mismatch";
+			long elapsedTime = -System.nanoTime();
+			try (OutputStream out = new FileOutputStream(outFile)) {
+				in.transferTo(out);
 			}
+			elapsedTime += System.nanoTime();
+			System.err.printf("Input  speed: %.2f MB/s%n",  inFile.length() / 1e6 / elapsedTime * 1.0e9);
+			System.err.printf("Output speed: %.2f MB/s%n", outFile.length() / 1e6 / elapsedTime * 1.0e9);
+			
 		} catch (IOException e) {
 			return "I/O exception: " + e.getMessage();
 		}
 		return null;
-	}
-	
-	
-	
-	/*---- Helper methods and class ----*/
-	
-	private static int readLittleEndianInt32(DataInput in) throws IOException {
-		return Integer.reverseBytes(in.readInt());
-	}
-	
-	
-	
-	private static final class LengthCrc32OutputStream extends FilterOutputStream {
-		
-		private long length;  // Total number of bytes written, modulo 2^64
-		private CRC32 checksum;
-		
-		
-		public LengthCrc32OutputStream(OutputStream out) {
-			super(out);
-			length = 0;
-			checksum = new CRC32();
-		}
-		
-		
-		@Override public void write(int b) throws IOException {
-			out.write(b);
-			length++;
-			checksum.update(b);
-		}
-		
-		
-		@Override public void write(byte[] b, int off, int len) throws IOException {
-			out.write(b, off, len);
-			length += len;
-			checksum.update(b, off, len);
-		}
-		
-		
-		public long getLength() {
-			return length;
-		}
-		
-		
-		public int getCrc32() {
-			return (int)checksum.getValue();
-		}
-		
 	}
 	
 }
