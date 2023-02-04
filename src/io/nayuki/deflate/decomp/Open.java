@@ -124,7 +124,7 @@ public final class Open implements State {
 	// This updates the bit buffer state and possibly also the byte buffer state.
 	private int readBits(int numBits) throws IOException {
 		// Check arguments and invariants
-		assert 1 <= numBits && numBits <= 16;  // Note: DEFLATE uses up to 16, but this method is correct up to 31
+		assert 0 <= numBits && numBits <= 16;  // Note: DEFLATE uses up to 16, but this method is correct up to 31
 		assert isBitBufferValid();
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
@@ -621,15 +621,12 @@ public final class Open implements State {
 		// stream was reached or the underlying stream experienced an I/O exception.
 		private int decodeRunLength(int sym) throws IOException {
 			assert 257 <= sym && sym <= 287;
-			if (sym <= 264)
-				return sym - 254;
-			else if (sym <= 284) {
-				int numExtraBits = (sym - 261) >>> 2;
-				return ((((sym - 1) & 3) | 4) << numExtraBits) + 3 + readBits(numExtraBits);
-			} else if (sym == 285)
-				return 258;
-			else  // sym is 286 or 287
+			try {
+				int temp = RUN_LENGTH_TABLE[sym - 257];
+				return (temp >>> 3) + readBits(temp & 7);
+			} catch (ArrayIndexOutOfBoundsException e) {
 				throw new DataFormatException("Reserved run length symbol: " + sym);
+			}
 		}
 		
 		
@@ -639,13 +636,12 @@ public final class Open implements State {
 		// stream was reached or the underlying stream experienced an I/O exception.
 		private int decodeDistance(int sym) throws IOException {
 			assert 0 <= sym && sym <= 31;
-			if (sym <= 3)
-				return sym + 1;
-			else if (sym <= 29) {
-				int numExtraBits = (sym >>> 1) - 1;
-				return (((sym & 1) | 2) << numExtraBits) + 1 + readBits(numExtraBits);
-			} else  // sym is 30 or 31
+			try {
+				int temp = DISTANCE_TABLE[sym];
+				return (temp >>> 4) + readBits(temp & 0xF);
+			} catch (ArrayIndexOutOfBoundsException e) {
 				throw new DataFormatException("Reserved distance symbol: " + sym);
+			}
 		}
 		
 		
