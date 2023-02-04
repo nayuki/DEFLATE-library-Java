@@ -72,6 +72,7 @@ public final class GzipInputStream extends InputStream {
 			DataInput din = new DataInputStream(rawInput);
 			if ((int)checksum.getValue() != Integer.reverseBytes(din.readInt()))
 				throw new DataFormatException("Decompression CRC-32 mismatch");
+			checksum = null;
 			if ((int)decompressedLength != Integer.reverseBytes(din.readInt()))
 				throw new DataFormatException("Decompressed size mismatch");
 		}
@@ -83,6 +84,7 @@ public final class GzipInputStream extends InputStream {
 		rawInput.close();
 		rawInput = null;
 		decompressedInput = null;
+		checksum = null;
 	}
 	
 }
