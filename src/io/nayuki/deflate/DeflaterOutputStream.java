@@ -95,6 +95,7 @@ public final class DeflaterOutputStream extends OutputStream {
 		if (output != null) {
 			writeBuffer(true);
 			bitOutput.finish();
+			bitOutput = null;
 			output.close();
 			output = null;
 		}

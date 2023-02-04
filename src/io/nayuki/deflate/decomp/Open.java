@@ -173,8 +173,7 @@ public final class Open implements State {
 	// Fills the empty input byte buffer with at least
 	// one new byte read from the underlying input stream.
 	private void fillInputBuffer() throws IOException {
-		if (inputBuffer.hasRemaining())
-			throw new AssertionError("Input buffer not fully consumed yet");
+		assert !inputBuffer.hasRemaining();
 		if (endExactly)
 			input.mark(inputBuffer.capacity());
 		int n = input.read(inputBuffer.array());

@@ -158,6 +158,8 @@ public enum DynamicHuffmanLiteral implements Strategy {
 			if (freq > 0)
 				leaves.add(new Leaf(freq, sym));
 		}
+		if (leaves.size() < 2)
+			throw new IllegalArgumentException("Fewer than 2 symbols used");
 		
 		// Package-merge algorithm
 		List<Node> nodes = new ArrayList<>();
