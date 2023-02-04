@@ -590,7 +590,7 @@ public final class Open implements State {
 		
 		
 		public boolean isDone() {
-			return isDone;
+			return numPendingOutputBytes == 0 && isDone;
 		}
 		
 		
