@@ -72,7 +72,7 @@ public record Lz77Huffman(
 				while (index < end) {
 					int bestRun = 0;
 					int bestDist = 0;
-					for (int dist = searchMinimumDistance, distEnd = Math.min(searchMaximumDistance, index - off); dist <= distEnd; dist++) {
+					for (int dist = searchMinimumDistance, distEnd = Math.min(searchMaximumDistance, index - off); dist <= distEnd && bestRun < searchMaximumRunLength; dist++) {
 						int run = 0;
 						int historyIndex = index - dist;
 						int dataIndex = index;
