@@ -69,6 +69,7 @@ public record GzipMetadata(
 	/*---- Static factory ----*/
 	
 	public static GzipMetadata read(InputStream in) throws IOException {
+		Objects.requireNonNull(in);
 		var in1 = new CheckedInputStream(in, new CRC32());
 		DataInput in2 = new DataInputStream(in1);
 		

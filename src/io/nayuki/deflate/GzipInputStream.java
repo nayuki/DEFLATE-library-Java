@@ -13,6 +13,7 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Objects;
 import java.util.zip.CRC32;
 
 
@@ -34,6 +35,7 @@ public final class GzipInputStream extends InputStream {
 	/*---- Constructor ----*/
 	
 	public GzipInputStream(InputStream in) throws IOException {
+		Objects.requireNonNull(in);
 		metadata = GzipMetadata.read(in);
 		if (!in.markSupported())
 			in = new BufferedInputStream(in);
