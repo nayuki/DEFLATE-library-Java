@@ -373,6 +373,8 @@ public final class Open implements State {
 				
 				// Create literal-length code tree
 				byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
+				if (litLenCodeLen[256] == 0)
+					throw new DataFormatException("End-of-block symbol has zero code length");
 				literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
 				literalLengthCodeTable = codeTreeToCodeTable(literalLengthCodeTree);
 				int maxBitsPerLitLen = 0;
