@@ -298,6 +298,16 @@ public record Lz77Huffman(
 	public static final int ABSOLUTE_MAXIMUM_DISTANCE = 32 * 1024;
 	
 	
+	public static final Lz77Huffman LITERAL_STATIC  = new Lz77Huffman(false, 0, 0, 0, 0);
+	public static final Lz77Huffman LITERAL_DYNAMIC = new Lz77Huffman(true , 0, 0, 0, 0);
+	
+	public static final Lz77Huffman RLE_STATIC  = new Lz77Huffman(false, ABSOLUTE_MINIMUM_RUN_LENGTH, ABSOLUTE_MAXIMUM_RUN_LENGTH, 1, 1);
+	public static final Lz77Huffman RLE_DYNAMIC = new Lz77Huffman(true , ABSOLUTE_MINIMUM_RUN_LENGTH, ABSOLUTE_MAXIMUM_RUN_LENGTH, 1, 1);
+	
+	public static final Lz77Huffman FULL_STATIC  = new Lz77Huffman(false, ABSOLUTE_MINIMUM_RUN_LENGTH, ABSOLUTE_MAXIMUM_RUN_LENGTH, ABSOLUTE_MINIMUM_DISTANCE, ABSOLUTE_MAXIMUM_DISTANCE);
+	public static final Lz77Huffman FULL_DYNAMIC = new Lz77Huffman(true , ABSOLUTE_MINIMUM_RUN_LENGTH, ABSOLUTE_MAXIMUM_RUN_LENGTH, ABSOLUTE_MINIMUM_DISTANCE, ABSOLUTE_MAXIMUM_DISTANCE);
+	
+	
 	
 	private static byte[] calcHuffmanCodeLengths(int[] symbolHistogram, int maxLen) {
 		List<Leaf> leaves = new ArrayList<>();
