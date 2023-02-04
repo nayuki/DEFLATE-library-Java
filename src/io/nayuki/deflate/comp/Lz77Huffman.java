@@ -66,7 +66,7 @@ public record Lz77Huffman(
 				int index = off + historyLen;
 				final int end = index + dataLen;
 				
-				var symbolsAndExtraBits = ShortBuffer.allocate(Math.toIntExact(Math.ceilDiv(dataLen * 4L, 3)));
+				var symbolsAndExtraBits = ShortBuffer.allocate(Math.toIntExact(Math.ceilDiv(dataLen * 4L, 3) + 1));
 				var litLenHistogram = new int[286];
 				var distHistogram = new int[30];
 				while (index < end) {
