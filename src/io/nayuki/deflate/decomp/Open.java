@@ -488,10 +488,13 @@ public final class Open implements State {
 					} else if (sym > 256) {  // Length and distance for copying
 						// Decode the run length (a customized version of decodeRunLength())
 						assert 257 <= sym && sym <= 287;
-						if (sym > 285)
-							throw new DataFormatException("Reserved run length symbol: " + sym);
 						{
-							int temp = RUN_LENGTH_TABLE[sym - 257];
+							int temp;
+							try {
+								temp = RUN_LENGTH_TABLE[sym - 257];
+							} catch (ArrayIndexOutOfBoundsException e) {
+								throw new DataFormatException("Reserved run length symbol: " + sym);
+							}
 							run = temp >>> 3;
 							int numExtraBits = temp & 7;
 							run += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
@@ -519,10 +522,13 @@ public final class Open implements State {
 						
 						// Decode the distance (a customized version of decodeDistance())
 						assert 0 <= distSym && distSym <= 31;
-						if (distSym > 29)
-							throw new DataFormatException("Reserved distance symbol: " + distSym);
 						{
-							int temp = DISTANCE_TABLE[distSym];
+							int temp;
+							try {
+								temp = DISTANCE_TABLE[distSym];
+							} catch (ArrayIndexOutOfBoundsException e) {
+								throw new DataFormatException("Reserved distance symbol: " + distSym);
+							}
 							dist = temp >>> 4;
 							int numExtraBits = temp & 0xF;
 							dist += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
