@@ -33,7 +33,7 @@ public final class Open implements State {
 	// The typical data flow in this decompressor looks like:
 	//   input (the underlying input stream) -> input.read()
 	//   -> inputBuffer -> packing logic in readBits()
-	//   -> inputBitBuffer -> readBit() or equivalent
+	//   -> inputBitBuffer0 -> readBit() or equivalent
 	//   -> Huffman decoding logic for literal and length-distance symbols
 	//   -> LZ77 decoding logic -> dictionary
 	//   -> copying to the caller's array
@@ -43,8 +43,8 @@ public final class Open implements State {
 	private final ByteBuffer inputBuffer;  // Can have any positive length (but longer means less overhead)
 	
 	// Buffer of bits packed from the bytes in `inputBuffer`
-	private long inputBitBuffer = 0;       // Always in the range [0, 2^inputBitBufferLength)
-	private int inputBitBufferLength = 0;  // Always in the range [0, 63]
+	private long inputBitBuffer0 = 0;       // Always in the range [0, 2^inputBitBuffer0Length)
+	private int inputBitBuffer0Length = 0;  // Always in the range [0, 63]
 	
 	
 	private Optional<BlockDecoder> blockDecoder = Optional.empty();
@@ -106,7 +106,7 @@ public final class Open implements State {
 		// Rewind the underlying stream, then skip over bytes that were already consumed.
 		// Note that a byte with some bits consumed is considered to be fully consumed.
 		input.reset();
-		int skip = inputBuffer.position() - inputBitBufferLength / 8;
+		int skip = inputBuffer.position() - inputBitBuffer0Length / 8;
 		assert skip >= 0;
 		new DataInputStream(input).skipNBytes(skip);
 	}
@@ -128,31 +128,31 @@ public final class Open implements State {
 		assert isBitBufferValid();
 		
 		// Ensure there is enough data in the bit buffer to satisfy the request
-		while (inputBitBufferLength < numBits) {
+		while (inputBitBuffer0Length < numBits) {
 			if (!inputBuffer.hasRemaining())
 				fillInputBuffer();
 			
 			// Pack as many bytes as possible from input byte buffer into the bit buffer
-			int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
+			int numBytes = Math.min((64 - inputBitBuffer0Length) >>> 3, inputBuffer.remaining());
 			assert 0 <= numBytes && numBytes <= 8;
-			for (int i = 0; i < numBytes; i++, inputBitBufferLength += 8)
-				inputBitBuffer |= (inputBuffer.get() & 0xFFL) << inputBitBufferLength;
+			for (int i = 0; i < numBytes; i++, inputBitBuffer0Length += 8)
+				inputBitBuffer0 |= (inputBuffer.get() & 0xFFL) << inputBitBuffer0Length;
 			assert isBitBufferValid();
 		}
 		
 		// Extract the bits to return
-		int result = (int)inputBitBuffer & ((1 << numBits) - 1);
+		int result = (int)inputBitBuffer0 & ((1 << numBits) - 1);
 		assert result >>> numBits == 0;
-		inputBitBuffer >>>= numBits;
-		inputBitBufferLength -= numBits;
+		inputBitBuffer0 >>>= numBits;
+		inputBitBuffer0Length -= numBits;
 		assert isBitBufferValid();
 		return result;
 	}
 	
 	
 	private boolean isBitBufferValid() {
-		return 0 <= inputBitBufferLength && inputBitBufferLength <= 64
-			&& (inputBitBufferLength == 64 || inputBitBuffer >>> inputBitBufferLength == 0);
+		return 0 <= inputBitBuffer0Length && inputBitBuffer0Length <= 64
+			&& (inputBitBuffer0Length == 64 || inputBitBuffer0 >>> inputBitBuffer0Length == 0);
 	}
 	
 	
@@ -176,11 +176,11 @@ public final class Open implements State {
 	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
 	private void alignInputToByte() {
 		assert isBitBufferValid();
-		int n = inputBitBufferLength & 7;
-		inputBitBuffer >>>= n;
-		inputBitBufferLength -= n;
+		int n = inputBitBuffer0Length & 7;
+		inputBitBuffer0 >>>= n;
+		inputBitBuffer0Length -= n;
 		assert isBitBufferValid();
-		assert inputBitBufferLength % 8 == 0;
+		assert inputBitBuffer0Length % 8 == 0;
 	}
 	
 	
@@ -236,7 +236,7 @@ public final class Open implements State {
 			
 			// Check bit buffer invariants
 			assert isBitBufferValid();
-			assert inputBitBufferLength % 8 == 0;
+			assert inputBitBuffer0Length % 8 == 0;
 			
 			len = Math.min(numRemainingBytes, len);
 			numRemainingBytes -= len;
@@ -245,20 +245,20 @@ public final class Open implements State {
 			assert off <= end && end <= b.length;
 			
 			// First unpack saved bits
-			for (; inputBitBufferLength >= 8 && index < end; index++)
+			for (; inputBitBuffer0Length >= 8 && index < end; index++)
 				b[index] = (byte)readBits(8);
 			
 			// Copy from input buffer
 			{
 				int n = Math.min(end - index, inputBuffer.remaining());
-				assert inputBitBufferLength == 0 || n == 0;
+				assert inputBitBuffer0Length == 0 || n == 0;
 				inputBuffer.get(b, index, n);
 				index += n;
 			}
 			
 			// Read directly from input stream, bypassing the input buffer
 			while (index < end) {
-				assert inputBitBufferLength == 0 && !inputBuffer.hasRemaining();
+				assert inputBitBuffer0Length == 0 && !inputBuffer.hasRemaining();
 				int n = input.read(b, index, end - index);
 				if (n == -1)
 					throw new EOFException("Unexpected end of stream");
@@ -423,34 +423,34 @@ public final class Open implements State {
 				assert isBitBufferValid();
 				
 				// Try to fill the input bit buffer (somewhat similar to logic in readBits())
-				if (inputBitBufferLength < maxBitsPerIteration) {
+				if (inputBitBuffer0Length < maxBitsPerIteration) {
 					ByteBuffer c = inputBuffer;  // Shorter name
-					int numBytes = Math.min((64 - inputBitBufferLength) >>> 3, inputBuffer.remaining());
+					int numBytes = Math.min((64 - inputBitBuffer0Length) >>> 3, inputBuffer.remaining());
 					assert 0 <= numBytes && numBytes <= 8;
 					switch (numBytes) {  // Only implement special cases that occur frequently in practice
 						case 2 -> {
-							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBufferLength;
-							inputBitBufferLength += 2 * 8;
+							inputBitBuffer0 |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8) << inputBitBuffer0Length;
+							inputBitBuffer0Length += 2 * 8;
 						}
 						case 3 -> {
-							inputBitBuffer |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBufferLength;
-							inputBitBufferLength += 3 * 8;
+							inputBitBuffer0 |= (long)((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16) << inputBitBuffer0Length;
+							inputBitBuffer0Length += 3 * 8;
 						}
 						case 4 -> {
-							inputBitBuffer |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBufferLength;
-							inputBitBufferLength += 4 * 8;
+							inputBitBuffer0 |= (((c.get()&0xFF) | (c.get()&0xFF)<<8 | (c.get()&0xFF)<<16 | c.get()<<24) & 0xFFFFFFFFL) << inputBitBuffer0Length;
+							inputBitBuffer0Length += 4 * 8;
 						}
 						case 5 -> {
-							inputBitBuffer |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32) << inputBitBufferLength;
-							inputBitBufferLength += 5 * 8;
+							inputBitBuffer0 |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32) << inputBitBuffer0Length;
+							inputBitBuffer0Length += 5 * 8;
 						}
 						case 6 -> {
-							inputBitBuffer |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32 | (c.get()&0xFFL)<<40) << inputBitBufferLength;
-							inputBitBufferLength += 6 * 8;
+							inputBitBuffer0 |= ((c.get()&0xFFL) | (c.get()&0xFFL)<<8 | (c.get()&0xFFL)<<16 | (c.get()&0xFFL)<<24 | (c.get()&0xFFL)<<32 | (c.get()&0xFFL)<<40) << inputBitBuffer0Length;
+							inputBitBuffer0Length += 6 * 8;
 						}
 						default -> {  // This slower general logic is valid for 0 <= numBytes <= 8
-							for (int j = 0; j < numBytes; j++, inputBitBufferLength += 8)
-								inputBitBuffer |= (c.get() & 0xFFL) << inputBitBufferLength;
+							for (int j = 0; j < numBytes; j++, inputBitBuffer0Length += 8)
+								inputBitBuffer0 |= (c.get() & 0xFFL) << inputBitBuffer0Length;
 						}
 					}
 					assert isBitBufferValid();
@@ -458,19 +458,19 @@ public final class Open implements State {
 				
 				int run, dist;
 				
-				if (inputBitBufferLength >= maxBitsPerIteration) {  // Fast path entirely from bit buffer
+				if (inputBitBuffer0Length >= maxBitsPerIteration) {  // Fast path entirely from bit buffer
 					// Decode next literal/length symbol (a customized version of decodeSymbol())
 					final int sym;
 					{
-						int temp = literalLengthCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+						int temp = literalLengthCodeTable[(int)inputBitBuffer0 & CODE_TABLE_MASK];
 						int consumed = temp & 0xF;
-						inputBitBuffer >>>= consumed;
-						inputBitBufferLength -= consumed;
+						inputBitBuffer0 >>>= consumed;
+						inputBitBuffer0Length -= consumed;
 						int node = temp >> 4;
 						while (node >= 0) {
-							node = literalLengthCodeTree[node + ((int)inputBitBuffer & 1)];
-							inputBitBuffer >>>= 1;
-							inputBitBufferLength--;
+							node = literalLengthCodeTree[node + ((int)inputBitBuffer0 & 1)];
+							inputBitBuffer0 >>>= 1;
+							inputBitBuffer0Length--;
 						}
 						sym = ~node;
 						assert isBitBufferValid();
@@ -497,9 +497,9 @@ public final class Open implements State {
 							}
 							run = temp >>> 3;
 							int numExtraBits = temp & 7;
-							run += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
-							inputBitBuffer >>>= numExtraBits;
-							inputBitBufferLength -= numExtraBits;
+							run += (int)inputBitBuffer0 & ((1 << numExtraBits) - 1);
+							inputBitBuffer0 >>>= numExtraBits;
+							inputBitBuffer0Length -= numExtraBits;
 						}
 						
 						// Decode next distance symbol (a customized version of decodeSymbol())
@@ -507,15 +507,15 @@ public final class Open implements State {
 							throw new DataFormatException("Length symbol encountered with empty distance code");
 						final int distSym;
 						{
-							int temp = distanceCodeTable[(int)inputBitBuffer & CODE_TABLE_MASK];
+							int temp = distanceCodeTable[(int)inputBitBuffer0 & CODE_TABLE_MASK];
 							int consumed = temp & 0xF;
-							inputBitBuffer >>>= consumed;
-							inputBitBufferLength -= consumed;
+							inputBitBuffer0 >>>= consumed;
+							inputBitBuffer0Length -= consumed;
 							int node = temp >> 4;
 							while (node >= 0) {
-								node = distanceCodeTree[node + ((int)inputBitBuffer & 1)];
-								inputBitBuffer >>>= 1;
-								inputBitBufferLength--;
+								node = distanceCodeTree[node + ((int)inputBitBuffer0 & 1)];
+								inputBitBuffer0 >>>= 1;
+								inputBitBuffer0Length--;
 							}
 							distSym = ~node;
 						}
@@ -531,9 +531,9 @@ public final class Open implements State {
 							}
 							dist = temp >>> 4;
 							int numExtraBits = temp & 0xF;
-							dist += (int)inputBitBuffer & ((1 << numExtraBits) - 1);
-							inputBitBuffer >>>= numExtraBits;
-							inputBitBufferLength -= numExtraBits;
+							dist += (int)inputBitBuffer0 & ((1 << numExtraBits) - 1);
+							inputBitBuffer0 >>>= numExtraBits;
+							inputBitBuffer0Length -= numExtraBits;
 						}
 						assert isBitBufferValid();
 						
@@ -609,10 +609,10 @@ public final class Open implements State {
 		private int decodeSymbol(short[] codeTree) throws IOException {
 			int node = 0;  // An index into the codeTree array which signifies the current tree node
 			while (node >= 0) {
-				if (inputBitBufferLength > 0) {  // Medium path using buffered bits
-					node = codeTree[node + ((int)inputBitBuffer & 1)];
-					inputBitBuffer >>>= 1;
-					inputBitBufferLength--;
+				if (inputBitBuffer0Length > 0) {  // Medium path using buffered bits
+					node = codeTree[node + ((int)inputBitBuffer0 & 1)];
+					inputBitBuffer0 >>>= 1;
+					inputBitBuffer0Length--;
 				} else  // Slow path with potential I/O operations
 					node = codeTree[node + readBits(1)];
 			}
