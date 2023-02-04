@@ -66,8 +66,8 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	@Override public void write(int b) throws IOException {
-		if (output == null)
-			throw new IllegalStateException("Stream already closed");
+		if (bitOutput == null)
+			throw new IllegalStateException("Stream already ended");
 		if (dataLength >= dataLookaheadLimit)
 			writeBuffer(false);
 		combinedBuffer[historyStart + historyLength + dataLength] = (byte)b;
@@ -76,8 +76,8 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	@Override public void write(byte[] b, int off, int len) throws IOException {
-		if (output == null)
-			throw new IllegalStateException("Stream already closed");
+		if (bitOutput == null)
+			throw new IllegalStateException("Stream already ended");
 		Objects.checkFromIndexSize(off, len, b.length);
 		while (len > 0) {
 			if (dataLength >= dataLookaheadLimit)
@@ -91,20 +91,26 @@ public final class DeflaterOutputStream extends OutputStream {
 	}
 	
 	
+	public void finish() throws IOException {
+		if (bitOutput == null)
+			throw new IllegalStateException("Stream already ended");
+		writeBuffer(true);
+		bitOutput.finish();
+		bitOutput = null;
+	}
+	
+	
 	@Override public void close() throws IOException {
-		if (output != null) {
-			writeBuffer(true);
-			bitOutput.finish();
-			bitOutput = null;
-			output.close();
-			output = null;
-		}
+		if (bitOutput != null)
+			finish();
+		output.close();
+		output = null;
 	}
 	
 	
 	private void writeBuffer(boolean isFinal) throws IOException {
-		if (output == null)
-			throw new IllegalStateException("Stream already closed");
+		if (bitOutput == null)
+			throw new IllegalStateException("Stream already ended");
 		
 		Strategy st = new MultiStrategy(
 			Uncompressed.SINGLETON,
