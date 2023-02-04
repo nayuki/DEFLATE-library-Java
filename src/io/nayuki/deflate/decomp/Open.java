@@ -809,72 +809,50 @@ public final class Open implements State {
 		
 		// For length symbols from 257 to 285 (inclusive). RUN_LENGTH_TABLE[i]
 		// = (base of run length) << 3 | (number of extra bits to read).
-		private static final short[] RUN_LENGTH_TABLE = {
-			  3 << 3 | 0,
-			  4 << 3 | 0,
-			  5 << 3 | 0,
-			  6 << 3 | 0,
-			  7 << 3 | 0,
-			  8 << 3 | 0,
-			  9 << 3 | 0,
-			 10 << 3 | 0,
-			 11 << 3 | 1,
-			 13 << 3 | 1,
-			 15 << 3 | 1,
-			 17 << 3 | 1,
-			 19 << 3 | 2,
-			 23 << 3 | 2,
-			 27 << 3 | 2,
-			 31 << 3 | 2,
-			 35 << 3 | 3,
-			 43 << 3 | 3,
-			 51 << 3 | 3,
-			 59 << 3 | 3,
-			 67 << 3 | 4,
-			 83 << 3 | 4,
-			 99 << 3 | 4,
-			115 << 3 | 4,
-			131 << 3 | 5,
-			163 << 3 | 5,
-			195 << 3 | 5,
-			227 << 3 | 5,
-			258 << 3 | 0,
-		};
+		private static final short[] RUN_LENGTH_TABLE = new short[29];
+		
+		static {
+			for (int i = 0; i < RUN_LENGTH_TABLE.length; i++) {
+				int sym = i + 257;
+				int run, extraBits;
+				if (sym <= 264) {
+					extraBits = 0;
+					run = sym - 254;
+				} else if (sym <= 284) {
+					extraBits = (sym - 261) / 4;
+					run = (((sym - 1) % 4 + 4) << extraBits) + 3;
+				} else if (sym == 285) {
+					extraBits = 0;
+					run = 258;
+				} else
+					throw new AssertionError("Unreachable value");
+				assert run >>> 12 == 0;
+				assert extraBits >>> 3 == 0;
+				RUN_LENGTH_TABLE[i] = (short)(run << 3 | extraBits);
+			}
+		}
+		
 		
 		// For length symbols from 0 to 29 (inclusive). DISTANCE_TABLE[i]
 		// = (base of distance) << 4 | (number of extra bits to read).
-		private static final int[] DISTANCE_TABLE = {
-			   0x1 << 4 |  0,
-			   0x2 << 4 |  0,
-			   0x3 << 4 |  0,
-			   0x4 << 4 |  0,
-			   0x5 << 4 |  1,
-			   0x7 << 4 |  1,
-			   0x9 << 4 |  2,
-			   0xD << 4 |  2,
-			  0x11 << 4 |  3,
-			  0x19 << 4 |  3,
-			  0x21 << 4 |  4,
-			  0x31 << 4 |  4,
-			  0x41 << 4 |  5,
-			  0x61 << 4 |  5,
-			  0x81 << 4 |  6,
-			  0xC1 << 4 |  6,
-			 0x101 << 4 |  7,
-			 0x181 << 4 |  7,
-			 0x201 << 4 |  8,
-			 0x301 << 4 |  8,
-			 0x401 << 4 |  9,
-			 0x601 << 4 |  9,
-			 0x801 << 4 | 10,
-			 0xC01 << 4 | 10,
-			0x1001 << 4 | 11,
-			0x1801 << 4 | 11,
-			0x2001 << 4 | 12,
-			0x3001 << 4 | 12,
-			0x4001 << 4 | 13,
-			0x6001 << 4 | 13,
-		};
+		private static final int[] DISTANCE_TABLE = new int[30];
+		
+		static {
+			for (int sym = 0; sym < DISTANCE_TABLE.length; sym++) {
+				int dist, extraBits;
+				if (sym <= 3) {
+					extraBits = 0;
+					dist = sym + 1;
+				} else if (sym <= 29) {
+					extraBits = sym / 2 - 1;
+					dist = ((sym % 2 + 2) << extraBits) + 1;
+				} else
+					throw new AssertionError("Unreachable value");
+				assert dist >>> 27 == 0;
+				assert extraBits >>> 4 == 0;
+			DISTANCE_TABLE[sym] = dist << 4 | extraBits;
+			}
+		}
 		
 	}
 	
