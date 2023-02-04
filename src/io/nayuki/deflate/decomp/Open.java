@@ -509,16 +509,16 @@ public final class Open implements State {
 							inputBitBuffer >>>= consumed;
 							inputBitBufferLength -= consumed;
 							int node = temp >> 4;
-							while (node >= 0) {  // Medium path
+							while (node >= 0) {
 								node = distanceCodeTree[node + ((int)inputBitBuffer & 1)];
 								inputBitBuffer >>>= 1;
 								inputBitBufferLength--;
 							}
 							distSym = ~node;
 						}
-						assert 0 <= distSym && distSym <= 31;
 						
 						// Decode the distance (a customized version of decodeDistance())
+						assert 0 <= distSym && distSym <= 31;
 						if (distSym > 29)
 							throw new DataFormatException("Reserved distance symbol: " + distSym);
 						{

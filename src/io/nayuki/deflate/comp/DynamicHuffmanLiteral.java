@@ -60,6 +60,7 @@ public enum DynamicHuffmanLiteral implements Strategy {
 				System.arraycopy(litLenCodeLen, 0, codeLens, 0, litLenCodeLen.length);
 				System.arraycopy(distCodeLen, 0, codeLens, litLenCodeLen.length, distCodeLen.length);
 				
+				// Greedy algorithm
 				List<Integer> codeLengthSymbols = new ArrayList<>();
 				List<Integer> extraBits = new ArrayList<>();
 				for (int i = 0; i < codeLens.length; ) {
@@ -169,6 +170,7 @@ public enum DynamicHuffmanLiteral implements Strategy {
 				Node b = nodes.get(j + 1);
 				newNodes.add(new InternalNode(a.frequency() + b.frequency(), a, b));
 			}
+			// Discard any unpaired node
 			nodes = newNodes;
 		}
 		
