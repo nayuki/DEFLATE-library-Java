@@ -11,6 +11,7 @@ package io.nayuki.deflate;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.util.Objects;
 import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
@@ -464,11 +465,12 @@ public final class InflaterInputStreamTest {
 	
 	/* Utility method */
 	
-	// 'input' is a string of 0's and 1's (with optional spaces) representing the input bit sequence.
-	// 'refOutput' is a string of pairs of hexadecimal digits (with optional spaces) representing
-	// the expected decompressed output byte sequence.
+	// `inputBits` has 0s and 1s, and optional spaces; its length need not be
+	// a multiple of 8. `refOutputHex` has pairs of hexadecimal digits (with
+	// optional spaces) representing the expected decompressed output byte sequence.
 	private static void test(String inputBits, String refOutputHex) throws IOException {
-		// Preprocess the bit string
+		// Process the input bit string
+		Objects.requireNonNull(inputBits);
 		inputBits = inputBits.replace(" ", "");
 		int padMode = rand.nextInt(3);
 		while (inputBits.length() % 8 != 0) {
@@ -480,34 +482,45 @@ public final class InflaterInputStreamTest {
 			};
 		}
 		
-		// Perform decompression with block reads and check output
+		// Perform decompression with single-byte reads
 		var bout = new ByteArrayOutputStream();
-		var iin = new InflaterInputStream(new StringInputStream(inputBits), false);
-		var buf = new byte[rand.nextInt(10) + 1];
-		while (true) {
-			int n = iin.read(buf);
-			if (n == -1)
-				break;
-			bout.write(buf, 0, n);
+		try (var iin = new InflaterInputStream(new StringInputStream(inputBits), false)) {
+			while (true) {
+				int b = iin.read();
+				if (b == -1)
+					break;
+				bout.write(b);
+			}
 		}
 		
-		// Remove spaces and convert hexadecimal to bytes
+		// Convert the reference hex string
+		Objects.requireNonNull(refOutputHex);
 		refOutputHex = refOutputHex.replace(" ", "");
 		if (refOutputHex.length() % 2 != 0)
 			throw new IllegalArgumentException();
 		var refOut = new byte[refOutputHex.length() / 2];
 		for (int i = 0; i < refOut.length; i++)
 			refOut[i] = (byte)Integer.parseInt(refOutputHex.substring(i * 2, (i + 1) * 2), 16);
+		
+		// Check decompressed output
 		Assert.assertArrayEquals(refOut, bout.toByteArray());
 		
-		// Perform decompression with single-byte reads and check output
-		bout = new ByteArrayOutputStream();
-		iin = new InflaterInputStream(new StringInputStream(inputBits), false);
-		while (true) {
-			int b = iin.read();
-			if (b == -1)
-				break;
-			bout.write(b);
+		// Perform decompression with block reads and check output
+		bout.reset();
+		try (var iin = new InflaterInputStream(new StringInputStream(inputBits), false)) {
+			while (true) {
+				var buf = new byte[rand.nextInt(100) + 1];
+				int off = rand.nextInt(buf.length + 1);
+				int len = rand.nextInt(buf.length - off + 1);
+				int n = iin.read(buf, off, len);
+				if (!(-1 <= n && n <= len))
+					throw new IllegalArgumentException();
+				if (n == -1)
+					break;
+				if (n == 0 && len != 0)
+					throw new IllegalArgumentException();
+				bout.write(buf, off, n);
+			}
 		}
 		Assert.assertArrayEquals(refOut, bout.toByteArray());
 	}
