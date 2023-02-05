@@ -19,11 +19,12 @@ import io.nayuki.deflate.comp.Strategy;
 
 
 /**
- * Compresses a byte stream into a DEFLATE data stream (raw format without zlib or gzip headers or footers).
+ * Compresses a byte stream into a DEFLATE data stream
+ * (raw format without zlib or gzip headers or footers).
  * <p>Currently only supports uncompressed blocks for simplicity, which actually
  * expands the data slightly, but still conforms to the DEFLATE format.</p>
- * <p>This class performs its own buffering, so it is unnecessary to wrap a
- * {@link BufferedOutputStream} around the {@link OutputStream} given to the constructor.</p>
+ * <p>This class performs its own buffering, so it is unnecessary to wrap a {@link
+ * BufferedOutputStream} around the {@link OutputStream} given to the constructor.</p>
  * @see InflaterInputStream
  */
 public final class DeflaterOutputStream extends OutputStream {

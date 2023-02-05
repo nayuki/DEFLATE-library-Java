@@ -34,10 +34,10 @@ public final class InflaterInputStream extends InputStream {
 	/*---- Constructors ----*/
 	
 	/**
-	 * Constructs an inflater input stream over the specified underlying input stream. The
-	 * underlying stream must contain DEFLATE-compressed data with no headers or footers (e.g. must
-	 * be unwrapped from the zlib or gzip container formats). When this inflater stream reaches the end,
-	 * the underlying stream will be at an unspecified position at or after the end of the DEFLATE data.
+	 * Constructs an inflater input stream over the specified underlying input stream. The underlying
+	 * stream must contain DEFLATE-compressed data with no headers or footers (e.g. must be unwrapped
+	 * from the zlib or gzip container formats). When this inflater stream reaches the end, the
+	 * underlying stream will be at an unspecified position at or after the end of the DEFLATE data.
 	 * @param in the underlying input stream of raw DEFLATE-compressed data
 	 * @throws NullPointerException if the input stream is {@code null}
 	 */
@@ -140,8 +140,8 @@ public final class InflaterInputStream extends InputStream {
 	 * is in the range [&minus;1, len]. A return value of 0 is allowed iff {@code len} is 0.
 	 * @throws NullPointerException if the array is {@code null}
 	 * @throws ArrayIndexOutOfBoundsException if the array subrange is out of bounds
-	 * @throws IOException if an I/O exception occurs in the underlying input stream, the end of
-	 * stream occurs at an unexpected position, or the compressed data has a format error
+	 * @throws IOException if an I/O exception occurs in the underlying input stream, the end
+	 * of stream occurs at an unexpected position, or the compressed data has a format error
 	 * @throws IllegalStateException if the stream has already been closed
 	 */
 	@Override public int read(byte[] b, int off, int len) throws IOException {
