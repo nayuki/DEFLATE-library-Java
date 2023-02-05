@@ -9,52 +9,57 @@
 package io.nayuki.deflate;
 
 import java.io.InputStream;
+import java.util.Objects;
 
 
 final class StringInputStream extends InputStream {
 	
-	private final String data;
-	private int index;
-	private int mark;
+	/*---- Fields ----*/
+	
+	private final String bits;
+	private int index = 0;
+	private int mark = -1;
 	
 	
 	
-	public StringInputStream(String str) {
-		if (!str.matches("[01]*"))
-			throw new IllegalArgumentException("String must consist of only 0s and 1s");
-		if (str.length() % 8 != 0)
-			throw new IllegalArgumentException("String length must be a multiple of 8");
-		
-		data = str;
-		index = 0;
-		mark = -1;
+	/*---- Constructor ----*/
+	
+	public StringInputStream(String s) {
+		Objects.requireNonNull(s);
+		if (!s.matches("[01]*"))
+			throw new IllegalArgumentException("String has characters other than 0 and 1");
+		if (s.length() % 8 != 0)
+			throw new IllegalArgumentException("String length not a multiple of 8");
+		bits = s;
 	}
 	
 	
 	
-	public int read() {
-		if (index >= data.length())
+	/*---- Methods ----*/
+	
+	@Override public int read() {
+		if (index >= bits.length())
 			return -1;
-		else {
-			int result = Integer.parseInt(data.substring(index, index + 8), 2);
-			result = Integer.reverse(result) >>> 24;
-			index += 8;
-			return result;
-		}
+		int result = Integer.parseInt(bits.substring(index, index + 8), 2);
+		result = Integer.reverse(result) >>> 24;
+		index += 8;
+		return result;
 	}
 	
 	
-	public boolean markSupported() {
+	@Override public boolean markSupported() {
 		return true;
 	}
 	
 	
-	public void mark(int limit) {
+	@Override public void mark(int limit) {
 		mark = index;
 	}
 	
 	
-	public void reset() {
+	@Override public void reset() {
+		if (mark == -1)
+			throw new IllegalStateException("No mark set");
 		index = mark;
 	}
 	
