@@ -65,6 +65,13 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	
+	OutputStream getUnderlyingStream() {
+		if (output == null)
+			throw new IllegalStateException("Stream already closed");
+		return output;
+	}
+	
+	
 	@Override public void write(int b) throws IOException {
 		if (bitOutput == null)
 			throw new IllegalStateException("Stream already ended");

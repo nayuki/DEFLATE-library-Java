@@ -20,8 +20,7 @@ public final class ZlibOutputStream extends OutputStream {
 	
 	/*---- Fields ----*/
 	
-	private OutputStream rawOutput;
-	private DeflaterOutputStream compressingOutput;
+	private DeflaterOutputStream output;
 	
 	private Adler32 checksum = new Adler32();
 	
@@ -30,17 +29,15 @@ public final class ZlibOutputStream extends OutputStream {
 	/*---- Constructors ----*/
 	
 	public ZlibOutputStream(OutputStream out, ZlibMetadata meta) throws IOException {
-		this(out, meta, new DeflaterOutputStream(out));
+		this(new DeflaterOutputStream(out), meta);
 	}
 	
 	
-	public ZlibOutputStream(OutputStream out, ZlibMetadata meta, DeflaterOutputStream compOut) throws IOException {
+	public ZlibOutputStream(DeflaterOutputStream out, ZlibMetadata meta) throws IOException {
 		Objects.requireNonNull(out);
 		Objects.requireNonNull(meta);
-		Objects.requireNonNull(compOut);
-		meta.write(out);
-		rawOutput = out;
-		compressingOutput = compOut;
+		meta.write(out.getUnderlyingStream());
+		output = out;
 	}
 	
 	
@@ -53,29 +50,28 @@ public final class ZlibOutputStream extends OutputStream {
 	
 	
 	@Override public void write(byte[] b, int off, int len) throws IOException {
-		if (compressingOutput == null)
+		if (checksum == null)
 			throw new IllegalStateException("Stream already ended");
-		compressingOutput.write(b, off, len);
+		output.write(b, off, len);
 		checksum.update(b, off, len);
 	}
 	
 	
 	public void finish() throws IOException {
-		if (compressingOutput == null)
+		if (checksum == null)
 			throw new IllegalStateException("Stream already ended");
-		compressingOutput.finish();
-		compressingOutput = null;
-		DataOutput dout = new DataOutputStream(rawOutput);
+		output.finish();
+		DataOutput dout = new DataOutputStream(output.getUnderlyingStream());
 		dout.writeInt((int)checksum.getValue());
 		checksum = null;
 	}
 	
 	
 	@Override public void close() throws IOException {
-		if (compressingOutput != null)
+		if (checksum != null)
 			finish();
-		rawOutput.close();
-		rawOutput = null;
+		output.close();
+		output = null;
 	}
 	
 }

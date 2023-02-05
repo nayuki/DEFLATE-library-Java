@@ -20,8 +20,7 @@ public final class GzipOutputStream extends OutputStream {
 	
 	/*---- Fields ----*/
 	
-	private OutputStream rawOutput;
-	private DeflaterOutputStream compressingOutput;
+	private DeflaterOutputStream output;
 	
 	private long uncompressedLength = 0;
 	private CRC32 checksum = new CRC32();
@@ -31,17 +30,15 @@ public final class GzipOutputStream extends OutputStream {
 	/*---- Constructors ----*/
 	
 	public GzipOutputStream(OutputStream out, GzipMetadata meta) throws IOException {
-		this(out, meta, new DeflaterOutputStream(out));
+		this(new DeflaterOutputStream(out), meta);
 	}
 	
 	
-	public GzipOutputStream(OutputStream out, GzipMetadata meta, DeflaterOutputStream compOut) throws IOException {
+	public GzipOutputStream(DeflaterOutputStream out, GzipMetadata meta) throws IOException {
 		Objects.requireNonNull(out);
 		Objects.requireNonNull(meta);
-		Objects.requireNonNull(compOut);
-		meta.write(out);
-		rawOutput = out;
-		compressingOutput = compOut;
+		meta.write(out.getUnderlyingStream());
+		output = out;
 	}
 	
 	
@@ -54,20 +51,19 @@ public final class GzipOutputStream extends OutputStream {
 	
 	
 	@Override public void write(byte[] b, int off, int len) throws IOException {
-		if (compressingOutput == null)
+		if (checksum == null)
 			throw new IllegalStateException("Stream already ended");
-		compressingOutput.write(b, off, len);
+		output.write(b, off, len);
 		uncompressedLength += len;
 		checksum.update(b, off, len);
 	}
 	
 	
 	public void finish() throws IOException {
-		if (compressingOutput == null)
+		if (checksum == null)
 			throw new IllegalStateException("Stream already ended");
-		compressingOutput.finish();
-		compressingOutput = null;
-		DataOutput dout = new DataOutputStream(rawOutput);
+		output.finish();
+		DataOutput dout = new DataOutputStream(output.getUnderlyingStream());
 		dout.writeInt(Integer.reverseBytes((int)checksum.getValue()));
 		checksum = null;
 		dout.writeInt(Integer.reverseBytes((int)uncompressedLength));
@@ -75,10 +71,10 @@ public final class GzipOutputStream extends OutputStream {
 	
 	
 	@Override public void close() throws IOException {
-		if (compressingOutput != null)
+		if (checksum != null)
 			finish();
-		rawOutput.close();
-		rawOutput = null;
+		output.close();
+		output = null;
 	}
 	
 }
