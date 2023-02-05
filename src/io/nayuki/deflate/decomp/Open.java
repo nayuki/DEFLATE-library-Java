@@ -262,12 +262,20 @@ public final class Open implements State {
 			}
 			
 			// Read directly from input stream, bypassing the input buffer
-			while (index < end) {
+			if (index < end) {
 				assert inputBitBuffer0Length + inputBitBuffer1Length == 0 && !inputBuffer.hasRemaining();
-				int n = input.read(b, index, end - index);
-				if (n == -1)
-					throw new EOFException("Unexpected end of stream");
-				index += n;
+				if (endExactly) {
+					inputBuffer.position(0).limit(0);
+					input.mark(0);
+				}
+				do {
+					int n = input.read(b, index, end - index);
+					if (n == -1)
+						throw new EOFException("Unexpected end of stream");
+					index += n;
+				} while (index < end);
+				if (endExactly)
+					input.mark(0);
 			}
 			
 			// Copy output bytes to dictionary
