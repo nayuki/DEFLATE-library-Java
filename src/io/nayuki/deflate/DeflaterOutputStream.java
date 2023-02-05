@@ -14,7 +14,7 @@ import java.io.OutputStream;
 import java.util.Objects;
 import io.nayuki.deflate.comp.BitOutputStream;
 import io.nayuki.deflate.comp.Decision;
-import io.nayuki.deflate.comp.DynamicHuffmanRle;
+import io.nayuki.deflate.comp.Lz77Huffman;
 import io.nayuki.deflate.comp.Strategy;
 
 
@@ -47,7 +47,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	public DeflaterOutputStream(OutputStream out) {
-		this(out, 64 * 1024, MAX_HISTORY_CAPACITY, DynamicHuffmanRle.SINGLETON);
+		this(out, 64 * 1024, MAX_HISTORY_CAPACITY, Lz77Huffman.RLE_DYNAMIC);
 	}
 	
 	
