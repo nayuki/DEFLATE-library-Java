@@ -187,13 +187,9 @@ public final class Open implements State {
 	
 	
 	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
-	private void alignInputToByte() {
-		assert isBitBufferValid();
-		int n = inputBitBuffer0Length & 7;
-		inputBitBuffer0 >>>= n;
-		inputBitBuffer0Length -= n;
-		assert isBitBufferValid();
-		assert inputBitBuffer0Length % 8 == 0;
+	private void alignInputToByte() throws IOException {
+		readBits((inputBitBuffer0Length + inputBitBuffer1Length) % 8);
+		assert (inputBitBuffer0Length + inputBitBuffer1Length) % 8 == 0;
 	}
 	
 	
@@ -249,7 +245,7 @@ public final class Open implements State {
 			
 			// Check bit buffer invariants
 			assert isBitBufferValid();
-			assert inputBitBuffer0Length % 8 == 0;
+			assert (inputBitBuffer0Length + inputBitBuffer1Length) % 8 == 0;
 			
 			len = Math.min(numRemainingBytes, len);
 			numRemainingBytes -= len;
@@ -258,20 +254,20 @@ public final class Open implements State {
 			assert off <= end && end <= b.length;
 			
 			// First unpack saved bits
-			for (; inputBitBuffer0Length >= 8 && index < end; index++)
+			for (; inputBitBuffer0Length + inputBitBuffer1Length >= 8 && index < end; index++)
 				b[index] = (byte)readBits(8);
 			
 			// Copy from input buffer
 			{
 				int n = Math.min(end - index, inputBuffer.remaining());
-				assert inputBitBuffer0Length == 0 || n == 0;
+				assert inputBitBuffer0Length + inputBitBuffer1Length == 0 || n == 0;
 				inputBuffer.get(b, index, n);
 				index += n;
 			}
 			
 			// Read directly from input stream, bypassing the input buffer
 			while (index < end) {
-				assert inputBitBuffer0Length == 0 && !inputBuffer.hasRemaining();
+				assert inputBitBuffer0Length + inputBitBuffer1Length == 0 && !inputBuffer.hasRemaining();
 				int n = input.read(b, index, end - index);
 				if (n == -1)
 					throw new EOFException("Unexpected end of stream");
