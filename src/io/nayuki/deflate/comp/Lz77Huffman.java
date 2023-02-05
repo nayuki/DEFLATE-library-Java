@@ -90,36 +90,37 @@ public record Lz77Huffman(
 					}
 					else {
 						{
-							int sym, extra, numExtra;
-							if      (bestRun <   11) { sym = (bestRun -   3) /  1 + 257;  extra = (bestRun -   3) %  1;  numExtra = 0; }
-							else if (bestRun <   19) { sym = (bestRun -  11) /  2 + 265;  extra = (bestRun -  11) %  2;  numExtra = 1; }
-							else if (bestRun <   35) { sym = (bestRun -  19) /  4 + 269;  extra = (bestRun -  19) %  4;  numExtra = 2; }
-							else if (bestRun <   67) { sym = (bestRun -  35) /  8 + 273;  extra = (bestRun -  35) %  8;  numExtra = 3; }
-							else if (bestRun <  131) { sym = (bestRun -  67) / 16 + 277;  extra = (bestRun -  67) % 16;  numExtra = 4; }
-							else if (bestRun <  258) { sym = (bestRun - 131) / 32 + 281;  extra = (bestRun - 131) % 32;  numExtra = 5; }
-							else if (bestRun == 258) { sym = 285;  extra = 0;  numExtra = 0; }
-							else  throw new AssertionError("Unreachable value");
+							int r = bestRun - 3;
+							int numExtra, sym, extra;
+							if (bestRun < 11) {  // Actually works down to run < 7
+								numExtra = 0;
+								sym = r + 257;
+								extra = 0;
+							} else if (bestRun == 258) {
+								numExtra = 0;
+								sym = 285;
+								extra = 0;
+							} else {
+								numExtra = 29 - Integer.numberOfLeadingZeros(r);
+								sym = (numExtra << 2) + (r >>> numExtra) + 257;
+								extra = r & ((1 << numExtra) - 1);
+							}
 							symbolsAndExtraBits.put((short)(sym << 4 | numExtra));
 							litLenHistogram[sym]++;
 							symbolsAndExtraBits.put((short)extra);
 						}
 						{
-							int sym, extra, numExtra;
-							if      (bestDist <     5) { sym = (bestDist -     1) /    1 +  0;  extra = (bestDist -     1) %    1;  numExtra =  0; }
-							else if (bestDist <     9) { sym = (bestDist -     5) /    2 +  4;  extra = (bestDist -     5) %    2;  numExtra =  1; }
-							else if (bestDist <    17) { sym = (bestDist -     9) /    4 +  6;  extra = (bestDist -     9) %    4;  numExtra =  2; }
-							else if (bestDist <    33) { sym = (bestDist -    17) /    8 +  8;  extra = (bestDist -    17) %    8;  numExtra =  3; }
-							else if (bestDist <    65) { sym = (bestDist -    33) /   16 + 10;  extra = (bestDist -    33) %   16;  numExtra =  4; }
-							else if (bestDist <   129) { sym = (bestDist -    65) /   32 + 12;  extra = (bestDist -    65) %   32;  numExtra =  5; }
-							else if (bestDist <   257) { sym = (bestDist -   129) /   64 + 14;  extra = (bestDist -   129) %   64;  numExtra =  6; }
-							else if (bestDist <   513) { sym = (bestDist -   257) /  128 + 16;  extra = (bestDist -   257) %  128;  numExtra =  7; }
-							else if (bestDist <  1025) { sym = (bestDist -   513) /  256 + 18;  extra = (bestDist -   513) %  256;  numExtra =  8; }
-							else if (bestDist <  2049) { sym = (bestDist -  1025) /  512 + 20;  extra = (bestDist -  1025) %  512;  numExtra =  9; }
-							else if (bestDist <  4097) { sym = (bestDist -  2049) / 1024 + 22;  extra = (bestDist -  2049) % 1024;  numExtra = 10; }
-							else if (bestDist <  8193) { sym = (bestDist -  4097) / 2048 + 24;  extra = (bestDist -  4097) % 2048;  numExtra = 11; }
-							else if (bestDist < 16385) { sym = (bestDist -  8193) / 4096 + 26;  extra = (bestDist -  8193) % 4096;  numExtra = 12; }
-							else if (bestDist < 32769) { sym = (bestDist - 16385) / 8192 + 28;  extra = (bestDist - 16385) % 8192;  numExtra = 13; }
-							else  throw new AssertionError("Unreachable value");
+							int d = bestDist - 1;
+							int numExtra, sym, extra;
+							if (bestDist < 5) {  // Actually works down to bestDist < 3
+								numExtra = 0;
+								sym = d;
+								extra = 0;
+							} else {
+								numExtra = 30 - Integer.numberOfLeadingZeros(d);
+								sym = (numExtra << 1) + (d >>> numExtra);
+								extra = d & ((1 << numExtra) - 1);
+							}
 							symbolsAndExtraBits.put((short)(sym << 4 | numExtra));
 							distHistogram[sym]++;
 							symbolsAndExtraBits.put((short)extra);
