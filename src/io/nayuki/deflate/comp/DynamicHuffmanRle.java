@@ -10,6 +10,7 @@ package io.nayuki.deflate.comp;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -73,7 +74,8 @@ public enum DynamicHuffmanRle implements Strategy {
 							else
 								throw new AssertionError("Unreachable value");
 							histogram[sym]++;
-							distCodeLen[0] = 1;
+							if (distCodeLen.length == 1)
+								distCodeLen = new int[]{1, 1};
 							index += runLen;
 							continue;
 						}
@@ -84,6 +86,10 @@ public enum DynamicHuffmanRle implements Strategy {
 				histogram[256]++;
 				if (dataLen == 0)
 					histogram[0]++;  // Dummy value to fill the Huffman code tree
+				int histoEnd = histogram.length;
+				for (; histoEnd > 257 && histogram[histoEnd - 1] == 0; histoEnd--);
+				if (histoEnd < histogram.length)
+					histogram = Arrays.copyOf(histogram, histoEnd);
 				int[] litLenCodeLen = calcHuffmanCodeLengths(histogram, 15);
 				
 				var codeLens = new int[litLenCodeLen.length + distCodeLen.length];
