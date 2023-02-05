@@ -407,8 +407,15 @@ public final class InflaterInputStreamTest {
 		
 		// Preprocess the bit string
 		inputBits = inputBits.replace(" ", "");
-		while (inputBits.length() % 8 != 0)
-			inputBits += "0";
+		int padMode = rand.nextInt(3);
+		while (inputBits.length() % 8 != 0) {
+			inputBits += switch (padMode) {
+				case 0 -> 0;
+				case 1 -> 1;
+				case 2 -> rand.nextInt(2);
+				default -> throw new AssertionError("Unreachable value");
+			};
+		}
 		
 		// Perform decompression with block reads and check output
 		ByteArrayOutputStream bout = new ByteArrayOutputStream();
