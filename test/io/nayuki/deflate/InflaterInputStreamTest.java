@@ -21,15 +21,15 @@ public final class InflaterInputStreamTest {
 	
 	@Test public void testRandomUncompressed() throws IOException {
 		for (int i = 0; i < 10000; i++) {
-			ByteArrayOutputStream bout0 = new ByteArrayOutputStream();
-			ByteArrayOutputStream bout1 = new ByteArrayOutputStream();
+			var bout0 = new ByteArrayOutputStream();
+			var bout1 = new ByteArrayOutputStream();
 			for (int j = 100; j > 0; j--) {
 				int len;
 				if (rand.nextDouble() < 0.01)
 					len = rand.nextInt(10000);
 				else
 					len = rand.nextInt(30);
-				byte[] block = new byte[len];
+				var block = new byte[len];
 				rand.nextBytes(block);
 				bout0.write(block);
 				
@@ -43,11 +43,11 @@ public final class InflaterInputStreamTest {
 			byte[] uncomp = bout0.toByteArray();
 			byte[] comp = bout1.toByteArray();
 			
-			ByteArrayInputStream bin = new ByteArrayInputStream(comp);
-			ByteArrayOutputStream bout = new ByteArrayOutputStream();
-			InflaterInputStream iin = new InflaterInputStream(bin, false);
+			var bin = new ByteArrayInputStream(comp);
+			var bout = new ByteArrayOutputStream();
+			var iin = new InflaterInputStream(bin, false);
 			for (int remain = uncomp.length; remain > 0; ) {
-				byte[] b = new byte[rand.nextInt(Math.min(remain + 1, 30))];
+				var b = new byte[rand.nextInt(Math.min(remain + 1, 30))];
 				int n = iin.read(b);
 				Assert.assertTrue(n >= 0);
 				bout.write(b, 0, n);
@@ -401,7 +401,7 @@ public final class InflaterInputStreamTest {
 		refOutputHex = refOutputHex.replace(" ", "");
 		if (refOutputHex.length() % 2 != 0)
 			throw new IllegalArgumentException();
-		byte[] refOut = new byte[refOutputHex.length() / 2];
+		var refOut = new byte[refOutputHex.length() / 2];
 		for (int i = 0; i < refOut.length; i++)
 			refOut[i] = (byte)Integer.parseInt(refOutputHex.substring(i * 2, (i + 1) * 2), 16);
 		
@@ -418,9 +418,9 @@ public final class InflaterInputStreamTest {
 		}
 		
 		// Perform decompression with block reads and check output
-		ByteArrayOutputStream bout = new ByteArrayOutputStream();
-		InflaterInputStream iin = new InflaterInputStream(new StringInputStream(inputBits), false);
-		byte[] buf = new byte[rand.nextInt(10) + 1];
+		var bout = new ByteArrayOutputStream();
+		var iin = new InflaterInputStream(new StringInputStream(inputBits), false);
+		var buf = new byte[rand.nextInt(10) + 1];
 		while (true) {
 			int n = iin.read(buf);
 			if (n == -1)
