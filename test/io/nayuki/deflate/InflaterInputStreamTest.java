@@ -64,7 +64,7 @@ public final class InflaterInputStreamTest {
 	public void testEofStartOfBlock() throws IOException {
 		// No blocks
 		test("",
-			"");
+			null);
 	}
 	
 	
@@ -72,7 +72,7 @@ public final class InflaterInputStreamTest {
 	public void testReservedBlockType() throws IOException {
 		// Reserved block type
 		test("1 11 00000",
-			"");
+			null);
 	}
 	
 	
@@ -80,7 +80,7 @@ public final class InflaterInputStreamTest {
 	public void testEofInBlockType() throws IOException {
 		// Partial block type
 		test("1 0",
-			"");
+			null);
 	}
 	
 	
@@ -113,7 +113,7 @@ public final class InflaterInputStreamTest {
 	public void testUncompressedEofBeforeLength() throws IOException {
 		// Uncompressed block (partial padding) (no length)
 		test("1 00 000",
-			"");
+			null);
 	}
 	
 	
@@ -121,7 +121,7 @@ public final class InflaterInputStreamTest {
 	public void testUncompressedEofInLength() throws IOException {
 		// Uncompressed block (partial length)
 		test("1 00 00000 0000000000",
-			"");
+			null);
 	}
 	
 	
@@ -129,7 +129,7 @@ public final class InflaterInputStreamTest {
 	public void testUncompressedMismatchedLength() throws IOException {
 		// Uncompressed block (mismatched len and nlen)
 		test("1 00 00000 0010000000010000 1111100100110101",
-			"");
+			null);
 	}
 	
 	
@@ -137,7 +137,7 @@ public final class InflaterInputStreamTest {
 	public void testUncompressedEofInData() throws IOException {
 		// Uncompressed block len=6: 55 EE (End)
 		test("1 00 11111 0110000000000000 1001111111111111 10101010 01110111",
-			"");
+			null);
 	}
 	
 	
@@ -146,7 +146,7 @@ public final class InflaterInputStreamTest {
 		// Uncompressed block len=0: (empty)
 		// No final block
 		test("0 00 00000   0000000000000000 1111111111111111",
-			"");
+			null);
 	}
 	
 	
@@ -203,7 +203,7 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanInvalidLengthCode286() throws IOException {
 		// Fixed Huffman block: #286
 		test("1 10 11000110",
-			"");
+			null);
 	}
 	
 	
@@ -211,7 +211,7 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanInvalidLengthCode287() throws IOException {
 		// Fixed Huffman block: #287
 		test("1 10 11000111",
-			"");
+			null);
 	}
 	
 	
@@ -219,7 +219,7 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanInvalidDistanceCode30() throws IOException {
 		// Fixed Huffman block: 00 #257 #30
 		test("1 10 00110000 0000001 11110",
-			"");
+			null);
 	}
 	
 	
@@ -227,7 +227,7 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanInvalidDistanceCode31() throws IOException {
 		// Fixed Huffman block: 00 #257 #31
 		test("1 10 00110000 0000001 11111",
-			"");
+			null);
 	}
 	
 	
@@ -235,7 +235,7 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanEofInHuffmanSymbol() throws IOException {
 		// Fixed Huffman block: (partial symbol)
 		test("1 10 00000",
-			"");
+			null);
 	}
 	
 	
@@ -243,7 +243,7 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanEofInRunExtensionBits() throws IOException {
 		// Fixed Huffman block: 00 #269+1(partial)
 		test("1 10 00110000 0001101 1",
-			"");
+			null);
 	}
 	
 	
@@ -251,7 +251,7 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanEofInDistanceExtensionBits() throws IOException {
 		// Fixed Huffman block: 00 #285 #0 #257 #8+00(partial)
 		test("1 10 00110000 11000101 00000 0000001 01000 00",
-			"");
+			null);
 	}
 	
 	
@@ -304,7 +304,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "100 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 100";
 		String codeLens = "1";
 		test(blockHeader + codeCounts + codeLenCodeLens + codeLens,
-			"");
+			null);
 	}
 	
 	
@@ -319,7 +319,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "000 000 100 000 000 000 000 000 000 000 000 000 000 000 000 000 000 100";
 		String codeLens = "0 0 11111111 10011011";
 		test(blockHeader + codeCounts + codeLenCodeLens + codeLens,
-			"");
+			null);
 	}
 	
 	
@@ -333,7 +333,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "100 100 100 000";
 		String padding = "0000000000000000000";
 		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			"");
+			null);
 	}
 	
 	
@@ -347,7 +347,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "100 100 100 100";
 		String padding = "0000000000000000000";
 		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			"");
+			null);
 	}
 	
 	
@@ -361,7 +361,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "100 010 110 000";
 		String padding = "0000000000000000000";
 		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			"");
+			null);
 	}
 	
 	
@@ -375,7 +375,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "000 000 000 000";
 		String padding = "0000000000000000000";
 		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			"");
+			null);
 	}
 	
 	
@@ -389,7 +389,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "000 000 100 000";
 		String padding = "0000000000000000000";
 		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			"");
+			null);
 	}
 	
 	
@@ -403,7 +403,7 @@ public final class InflaterInputStreamTest {
 		String codeLenCodeLens = "010 100 000 000";
 		String padding = "0000000000000000000";
 		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			"");
+			null);
 	}
 	
 	
@@ -421,7 +421,7 @@ public final class InflaterInputStreamTest {
 		String data = "10 11";
 		String padding = "0000000000000000";
 		test(blockHeader + codeCounts + codeLenCodeLens + codeLens + data + padding,
-			"");
+			null);
 	}
 	
 	
@@ -432,14 +432,6 @@ public final class InflaterInputStreamTest {
 	// 'refOutput' is a string of pairs of hexadecimal digits (with optional spaces) representing
 	// the expected decompressed output byte sequence.
 	private static void test(String inputBits, String refOutputHex) throws IOException {
-		// Remove spaces and convert hexadecimal to bytes
-		refOutputHex = refOutputHex.replace(" ", "");
-		if (refOutputHex.length() % 2 != 0)
-			throw new IllegalArgumentException();
-		var refOut = new byte[refOutputHex.length() / 2];
-		for (int i = 0; i < refOut.length; i++)
-			refOut[i] = (byte)Integer.parseInt(refOutputHex.substring(i * 2, (i + 1) * 2), 16);
-		
 		// Preprocess the bit string
 		inputBits = inputBits.replace(" ", "");
 		int padMode = rand.nextInt(3);
@@ -462,6 +454,14 @@ public final class InflaterInputStreamTest {
 				break;
 			bout.write(buf, 0, n);
 		}
+		
+		// Remove spaces and convert hexadecimal to bytes
+		refOutputHex = refOutputHex.replace(" ", "");
+		if (refOutputHex.length() % 2 != 0)
+			throw new IllegalArgumentException();
+		var refOut = new byte[refOutputHex.length() / 2];
+		for (int i = 0; i < refOut.length; i++)
+			refOut[i] = (byte)Integer.parseInt(refOutputHex.substring(i * 2, (i + 1) * 2), 16);
 		Assert.assertArrayEquals(refOut, bout.toByteArray());
 		
 		// Perform decompression with single-byte reads and check output
