@@ -8,7 +8,6 @@
 
 package io.nayuki.deflate;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
@@ -18,47 +17,6 @@ import org.junit.Test;
 
 
 public final class InflaterInputStreamTest {
-	
-	@Test public void testRandomUncompressed() throws IOException {
-		for (int i = 0; i < 10000; i++) {
-			var bout0 = new ByteArrayOutputStream();
-			var bout1 = new ByteArrayOutputStream();
-			for (int j = 100; j > 0; j--) {
-				int len;
-				if (rand.nextDouble() < 0.01)
-					len = rand.nextInt(10000);
-				else
-					len = rand.nextInt(30);
-				var block = new byte[len];
-				rand.nextBytes(block);
-				bout0.write(block);
-				
-				bout1.write(j > 1 ? 0x00 : 0x01);
-				bout1.write(len >>> 0);
-				bout1.write(len >>> 8);
-				bout1.write(~len >>> 0);
-				bout1.write(~len >>> 8);
-				bout1.write(block);
-			}
-			byte[] uncomp = bout0.toByteArray();
-			byte[] comp = bout1.toByteArray();
-			
-			var bin = new ByteArrayInputStream(comp);
-			var bout = new ByteArrayOutputStream();
-			var iin = new InflaterInputStream(bin, false);
-			for (int remain = uncomp.length; remain > 0; ) {
-				var b = new byte[rand.nextInt(Math.min(remain + 1, 30))];
-				int n = iin.read(b);
-				Assert.assertTrue(n >= 0);
-				bout.write(b, 0, n);
-				remain -= n;
-			}
-			Assert.assertEquals(-1, iin.read(new byte[rand.nextInt(10) + 1]));
-			Assert.assertEquals(-1, iin.read(new byte[0]));
-			Assert.assertArrayEquals(uncomp, bout.toByteArray());
-		}
-	}
-	
 	
 	@Test(expected=EOFException.class)
 	public void testEofStartOfBlock() throws IOException {
@@ -156,6 +114,40 @@ public final class InflaterInputStreamTest {
 		// Uncompressed block len=2: AB CD
 		test("0 10 110010000 110100001 111111111 0000000  1 00 0100000000000000 1011111111111111 11010101 10110011",
 			"90 A1 FF AB CD");
+	}
+	
+	
+	@Test public void testUncompressedRandom() throws IOException {
+		final int TRIALS = 100;
+		for (int i = 0; i < TRIALS; i++) {
+			int numBlocks = rand.nextInt(30) + 1;
+			var inBits = new StringBuilder();
+			var outBytes = new StringBuilder();
+			for (int j = 0; j < numBlocks; j++) {
+				inBits.append(j + 1 < numBlocks ? "0" : "1");  // bfinal
+				inBits.append("00");  // btype
+				for (int k = 0; k < 5; k++)  // Padding
+					inBits.append(rand.nextInt(2));
+				
+				int len = rand.nextInt(17);
+				if (len > 0) {
+					len = 1 << (len - 1);
+					len |= rand.nextInt(len);
+				}
+				int temp = len | ((~len) << 16);
+				for (int k = 0; k < 32; k++)
+					inBits.append((temp >>> k) & 1);
+				
+				var data = new byte[len];
+				rand.nextBytes(data);
+				for (byte b : data) {
+					outBytes.append(String.format("%02x", b));
+					for (int k = 0; k < 8; k++, b >>>= 1)
+						inBits.append(b & 1);
+				}
+			}
+			test(inBits.toString(), outBytes.toString());
+		}
 	}
 	
 	
