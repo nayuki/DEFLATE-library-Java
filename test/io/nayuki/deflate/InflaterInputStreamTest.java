@@ -151,6 +151,50 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
+	@Test public void testUncompressedRandomAndShortFixedHuffman() throws IOException {
+		final int TRIALS = 100;
+		for (int i = 0; i < TRIALS; i++) {
+			int numBlocks = rand.nextInt(30) + 1;
+			var inBits = new StringBuilder();
+			var outBytes = new StringBuilder();
+			for (int j = 0; j < numBlocks; j++) {
+				inBits.append(j + 1 < numBlocks ? "0" : "1");  // bfinal
+				if (rand.nextDouble() < 0.5) {
+					inBits.append("00");  // btype
+					while (inBits.length() % 8 != 0)  // Padding
+						inBits.append(rand.nextInt(2));
+					
+					int len = rand.nextInt(17);
+					if (len > 0) {
+						len = 1 << (len - 1);
+						len |= rand.nextInt(len);
+					}
+					int temp = len | ((~len) << 16);
+					for (int k = 0; k < 32; k++)
+						inBits.append((temp >>> k) & 1);
+					
+					var data = new byte[len];
+					rand.nextBytes(data);
+					for (byte b : data) {
+						outBytes.append(String.format("%02x", b));
+						for (int k = 0; k < 8; k++, b >>>= 1)
+							inBits.append(b & 1);
+					}
+				} else {
+					inBits.append("10");  // btype
+					inBits.append("111111111");  // Symbol #255 (0xFF)
+					outBytes.append("FF");
+					inBits.append("0000000");  // End of block
+					// Including bfinal, this writes a total of 19 bits, which is 3
+					// modulo 8. By writing many consecutive blocks of this type, the
+					// starting position of the next block can be any number mod 8.
+				}
+			}
+			test(inBits.toString(), outBytes.toString());
+		}
+	}
+	
+	
 	@Test
 	public void testFixedHuffmanEmpty() throws IOException {
 		// Fixed Huffman block: End
