@@ -186,13 +186,6 @@ public final class Open implements State {
 	}
 	
 	
-	// Discards the remaining bits (0 to 7) in the current byte being read, if any. Always succeeds.
-	private void alignInputToByte() throws IOException {
-		readBits((inputBitBuffer0Length + inputBitBuffer1Length) % 8);
-		assert (inputBitBuffer0Length + inputBitBuffer1Length) % 8 == 0;
-	}
-	
-	
 	
 	/*---- Constants ----*/
 	
@@ -231,7 +224,10 @@ public final class Open implements State {
 		
 		
 		public UncompressedBlock() throws IOException {
-			alignInputToByte();
+			// Discard bits to align to byte
+			readBits((inputBitBuffer0Length + inputBitBuffer1Length) % 8);
+			assert (inputBitBuffer0Length + inputBitBuffer1Length) % 8 == 0;
+			
 			numRemainingBytes = readBits(16);
 			assert 0x0000 <= numRemainingBytes && numRemainingBytes <= 0xFFFF;
 			if (numRemainingBytes != (readBits(16) ^ 0xFFFF))
