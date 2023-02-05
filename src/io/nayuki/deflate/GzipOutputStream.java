@@ -22,8 +22,8 @@ public final class GzipOutputStream extends OutputStream {
 	
 	private DeflaterOutputStream output;
 	
-	private long uncompressedLength = 0;
 	private CRC32 checksum = new CRC32();
+	private long uncompressedLength = 0;
 	
 	
 	
@@ -54,8 +54,8 @@ public final class GzipOutputStream extends OutputStream {
 		if (checksum == null)
 			throw new IllegalStateException("Stream already ended");
 		output.write(b, off, len);
-		uncompressedLength += len;
 		checksum.update(b, off, len);
+		uncompressedLength += len;
 	}
 	
 	
