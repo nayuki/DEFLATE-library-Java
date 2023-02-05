@@ -13,10 +13,7 @@ import java.io.IOException;
 
 public interface Decision {
 	
-	public long getBitLength();
-	
-	
-	public int getBitPositionBeforeAligningToByte();
+	public long[] getBitLengths();
 	
 	
 	public void compressTo(BitOutputStream out, boolean isFinal) throws IOException;

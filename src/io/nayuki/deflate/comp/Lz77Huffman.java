@@ -41,7 +41,7 @@ public record Lz77Huffman(
 	
 	@Override public Decision decide(byte[] b, int off, int historyLen, int dataLen) {
 		return new Decision() {
-			private final long bitLength;
+			private final long[] bitLengths = new long[8];
 			{
 				var temp = new CountingBitOutputStream();
 				try {
@@ -49,16 +49,12 @@ public record Lz77Huffman(
 				} catch (IOException e) {
 					throw new AssertionError("Caught impossible exception", e);
 				}
-				bitLength = temp.getBitLength();
+				Arrays.fill(bitLengths, temp.getBitLength());
 			}
 			
 			
-			@Override public long getBitLength() {
-				return bitLength;
-			}
-			
-			@Override public int getBitPositionBeforeAligningToByte() {
-				return -1;
+			@Override public long[] getBitLengths() {
+				return bitLengths;
 			}
 			
 			

@@ -18,13 +18,15 @@ public enum Uncompressed implements Strategy {
 	
 	@Override public Decision decide(byte[] b, int off, int historyLen, int dataLen) {
 		return new Decision() {
-			@Override public long getBitLength() {
+			private final long[] bitLengths = new long[8];
+			{
 				int numBlocks = Math.max(Math.ceilDiv(dataLen, MAX_BLOCK_LEN), 1);
-				return dataLen * 8L + numBlocks * 35L;
+				for (int i = 0; i < bitLengths.length; i++)
+					bitLengths[i] = dataLen * 8L + numBlocks * 40L + ((13 - i) % 8 - 5);
 			}
 			
-			@Override public int getBitPositionBeforeAligningToByte() {
-				return 1 + 2;
+			@Override public long[] getBitLengths() {
+				return bitLengths;
 			}
 			
 			@Override public void compressTo(BitOutputStream out, boolean isFinal) throws IOException {

@@ -8,6 +8,8 @@
 
 package io.nayuki.deflate.comp;
 
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.Objects;
 
 
@@ -27,17 +29,33 @@ public final class MultiStrategy implements Strategy {
 	
 	
 	public Decision decide(byte[] b, int off, int historyLen, int dataLen) {
-		long minBitLength = Long.MAX_VALUE;
-		Decision minDecision = null;
-		for (Strategy st : strategies) {
-			Decision dec = st.decide(b, off, historyLen, dataLen);
-			long bitLength = dec.getBitLength();
-			if (bitLength < minBitLength) {
-				minBitLength = bitLength;
-				minDecision = dec;
+		return new Decision() {
+			private final long[] bitLengths = new long[8];
+			private final Decision[] subdecisions = new Decision[bitLengths.length];
+			{
+				Arrays.fill(bitLengths, Long.MAX_VALUE);
+				for (Strategy st : strategies) {
+					Decision dec = st.decide(b, off, historyLen, dataLen);
+					long[] bitLens = dec.getBitLengths();
+					for (int i = 0; i < bitLengths.length; i++) {
+						if (bitLens[i] < bitLengths[i]) {
+							bitLengths[i] = bitLens[i];
+							subdecisions[i] = dec;
+						}
+					}
+				}
+				for (Decision dec : subdecisions)
+					Objects.requireNonNull(dec);
 			}
-		}
-		return minDecision;
+			
+			@Override public long[] getBitLengths() {
+				return bitLengths;
+			}
+			
+			@Override public void compressTo(BitOutputStream out, boolean isFinal) throws IOException {
+				subdecisions[out.getBitPosition()].compressTo(out, isFinal);
+			}
+		};
 	}
 	
 }
