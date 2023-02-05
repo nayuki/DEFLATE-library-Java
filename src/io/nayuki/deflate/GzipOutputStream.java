@@ -63,6 +63,8 @@ public final class GzipOutputStream extends OutputStream {
 	
 	
 	public void finish() throws IOException {
+		if (compressingOutput == null)
+			throw new IllegalStateException("Stream already ended");
 		compressingOutput.finish();
 		compressingOutput = null;
 		DataOutput dout = new DataOutputStream(rawOutput);
