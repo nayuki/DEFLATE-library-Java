@@ -86,7 +86,7 @@ public record Lz77Huffman(
 							bestDist = dist;
 						}
 					}
-					if (bestRun < searchMinimumRunLength) {
+					if (bestRun == 0 || bestRun < searchMinimumRunLength) {
 						int sym = b[index] & 0xFF;  // Literal
 						index++;
 						symbolsAndExtraBits.put((short)(sym << 4));
