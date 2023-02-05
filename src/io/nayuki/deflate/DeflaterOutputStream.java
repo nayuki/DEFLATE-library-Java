@@ -15,10 +15,7 @@ import java.util.Objects;
 import io.nayuki.deflate.comp.BitOutputStream;
 import io.nayuki.deflate.comp.Decision;
 import io.nayuki.deflate.comp.DynamicHuffmanRle;
-import io.nayuki.deflate.comp.MultiStrategy;
-import io.nayuki.deflate.comp.StaticHuffmanRle;
 import io.nayuki.deflate.comp.Strategy;
-import io.nayuki.deflate.comp.Uncompressed;
 
 
 /**
@@ -46,13 +43,15 @@ public final class DeflaterOutputStream extends OutputStream {
 	private int historyLength = 0;
 	private int dataLength = 0;
 	
+	private final Strategy strategy;
+	
 	
 	public DeflaterOutputStream(OutputStream out) {
-		this(out, 64 * 1024, MAX_HISTORY_CAPACITY);
+		this(out, 64 * 1024, MAX_HISTORY_CAPACITY, DynamicHuffmanRle.SINGLETON);
 	}
 	
 	
-	public DeflaterOutputStream(OutputStream out, int dataLookaheadLimit, int historyLookbehindLimit) {
+	public DeflaterOutputStream(OutputStream out, int dataLookaheadLimit, int historyLookbehindLimit, Strategy strat) {
 		output = Objects.requireNonNull(out);
 		bitOutput = new BitOut();
 		if (dataLookaheadLimit < 1 || historyLookbehindLimit < 0 || historyLookbehindLimit > MAX_HISTORY_CAPACITY
@@ -61,6 +60,7 @@ public final class DeflaterOutputStream extends OutputStream {
 		combinedBuffer = new byte[historyLookbehindLimit + Math.max(dataLookaheadLimit, historyLookbehindLimit)];
 		this.historyLookbehindLimit = historyLookbehindLimit;
 		this.dataLookaheadLimit = dataLookaheadLimit;
+		strategy = Objects.requireNonNull(strat);
 	}
 	
 	
@@ -112,11 +112,7 @@ public final class DeflaterOutputStream extends OutputStream {
 		if (bitOutput == null)
 			throw new IllegalStateException("Stream already ended");
 		
-		Strategy st = new MultiStrategy(
-			Uncompressed.SINGLETON,
-			StaticHuffmanRle.SINGLETON,
-			DynamicHuffmanRle.SINGLETON);
-		Decision dec = st.decide(combinedBuffer, historyStart, historyLength, dataLength);
+		Decision dec = strategy.decide(combinedBuffer, historyStart, historyLength, dataLength);
 		dec.compressTo(bitOutput, isFinal);
 		if (isFinal)
 			return;
