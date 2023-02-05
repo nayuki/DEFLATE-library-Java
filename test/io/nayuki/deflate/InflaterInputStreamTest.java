@@ -484,14 +484,17 @@ public final class InflaterInputStreamTest {
 		
 		// Perform decompression with single-byte reads
 		var bout = new ByteArrayOutputStream();
-		try (var iin = new InflaterInputStream(new StringInputStream(inputBits), false)) {
-			while (true) {
-				int b = iin.read();
-				if (b == -1)
-					break;
-				bout.write(b);
-			}
+		var sin = new StringInputStream(inputBits);
+		@SuppressWarnings("resource")
+		var iin = new InflaterInputStream(sin, true);
+		while (true) {
+			int b = iin.read();
+			if (b == -1)
+				break;
+			bout.write(b);
 		}
+		if (sin.read() != -1)
+			throw new IllegalArgumentException();
 		
 		// Convert the reference hex string
 		Objects.requireNonNull(refOutputHex);
@@ -507,20 +510,20 @@ public final class InflaterInputStreamTest {
 		
 		// Perform decompression with block reads and check output
 		bout.reset();
-		try (var iin = new InflaterInputStream(new StringInputStream(inputBits), false)) {
-			while (true) {
-				var buf = new byte[rand.nextInt(100) + 1];
-				int off = rand.nextInt(buf.length + 1);
-				int len = rand.nextInt(buf.length - off + 1);
-				int n = iin.read(buf, off, len);
-				if (!(-1 <= n && n <= len))
-					throw new IllegalArgumentException();
-				if (n == -1)
-					break;
-				if (n == 0 && len != 0)
-					throw new IllegalArgumentException();
-				bout.write(buf, off, n);
-			}
+		sin = new StringInputStream(inputBits);
+		iin = new InflaterInputStream(sin, true);
+		while (true) {
+			var buf = new byte[rand.nextInt(100) + 1];
+			int off = rand.nextInt(buf.length + 1);
+			int len = rand.nextInt(buf.length - off + 1);
+			int n = iin.read(buf, off, len);
+			if (!(-1 <= n && n <= len))
+				throw new IllegalArgumentException();
+			if (n == -1)
+				break;
+			if (n == 0 && len != 0)
+				throw new IllegalArgumentException();
+			bout.write(buf, off, n);
 		}
 		Assert.assertArrayEquals(refOut, bout.toByteArray());
 	}
