@@ -28,14 +28,20 @@ public final class GzipOutputStream extends OutputStream {
 	
 	
 	
-	/*---- Constructor ----*/
+	/*---- Constructors ----*/
 	
 	public GzipOutputStream(OutputStream out, GzipMetadata meta) throws IOException {
+		this(out, meta, new DeflaterOutputStream(out));
+	}
+	
+	
+	public GzipOutputStream(OutputStream out, GzipMetadata meta, DeflaterOutputStream compOut) throws IOException {
 		Objects.requireNonNull(out);
 		Objects.requireNonNull(meta);
+		Objects.requireNonNull(compOut);
 		meta.write(out);
 		rawOutput = out;
-		compressingOutput = new DeflaterOutputStream(out);
+		compressingOutput = compOut;
 	}
 	
 	
