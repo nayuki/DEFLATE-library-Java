@@ -53,7 +53,7 @@ public final class DeflaterOutputStream extends OutputStream {
 	
 	
 	public DeflaterOutputStream(OutputStream out, int dataLookaheadLimit, int historyLookbehindLimit) {
-		this.output = Objects.requireNonNull(out);
+		output = Objects.requireNonNull(out);
 		bitOutput = new BitOut();
 		if (dataLookaheadLimit < 1 || historyLookbehindLimit < 0 || historyLookbehindLimit > MAX_HISTORY_CAPACITY
 				|| (long)dataLookaheadLimit + historyLookbehindLimit > Integer.MAX_VALUE)

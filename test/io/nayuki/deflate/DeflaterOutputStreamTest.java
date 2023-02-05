@@ -85,16 +85,16 @@ public class DeflaterOutputStreamTest {
 	
 	@Test public void testLongRandomly() throws IOException {
 		for (int i = 0; i < 1000; i++) {
-			var data = new byte[rand.nextInt(1000000)];
+			var data = new byte[rand.nextInt(1_000_000)];
 			rand.nextBytes(data);
-			ByteArrayOutputStream bout = new ByteArrayOutputStream();
+			var bout = new ByteArrayOutputStream();
 			try (OutputStream dout = new DeflaterOutputStream(bout)) {
 				for (int off = 0; off < data.length; ) {
 					if (rand.nextDouble() < 0.9) {
 						dout.write(data[off]);
 						off++;
 					} else {
-						int n = rand.nextInt(Math.min(300000, data.length - off)) + 1;
+						int n = rand.nextInt(Math.min(300_000, data.length - off)) + 1;
 						dout.write(data, off, n);
 						off += n;
 					}
