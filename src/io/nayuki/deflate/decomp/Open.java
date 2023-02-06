@@ -62,6 +62,7 @@ public final class Open implements State {
 	// Buffer of last 32 KiB of decoded data, for LZ77 decompression
 	private final byte[] dictionary = new byte[DICTIONARY_LENGTH];
 	private int dictionaryIndex = 0;  // Always in the range [0, dictionary.length)
+	private int dictionaryLength = 0;  // Number of bytes written, in the range [0, dictionary.length], saturating at the maximum
 	
 	
 	
@@ -285,6 +286,7 @@ public final class Open implements State {
 				index += n;
 				dictionaryIndex = (dictionaryIndex + n) & DICTIONARY_MASK;
 			}
+			dictionaryLength += Math.min(len, dictionary.length - dictionaryLength);
 			
 			return len;
 		}
@@ -494,6 +496,8 @@ public final class Open implements State {
 						index++;
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						if (dictionaryLength < dictionary.length)
+							dictionaryLength++;
 						continue;
 						
 					} else if (sym > 256) {  // Length and distance for copying
@@ -561,6 +565,8 @@ public final class Open implements State {
 						index++;
 						dictionary[dictionaryIndex] = (byte)sym;
 						dictionaryIndex = (dictionaryIndex + 1) & DICTIONARY_MASK;
+						if (dictionaryLength < dictionary.length)
+							dictionaryLength++;
 						continue;
 					} else if (sym > 256) {  // Length and distance for copying
 						run = decodeRunLength(sym);
@@ -578,6 +584,8 @@ public final class Open implements State {
 				// Copy bytes to output and dictionary
 				assert 3 <= run && run <= MAX_RUN_LENGTH;
 				assert 1 <= dist && dist <= 32768;
+				if (dist > dictionaryLength)
+					throw new DataFormatException("Attempting to copy from before start of dictionary");
 				int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
 				if (run <= end - index) {  // Nice case with less branching
 					for (int i = 0; i < run; i++) {
@@ -601,6 +609,7 @@ public final class Open implements State {
 							numPendingOutputBytes++;
 					}
 				}
+				dictionaryLength += Math.min(run, dictionary.length - dictionaryLength);
 			}
 			return index - off;
 		}
