@@ -27,6 +27,8 @@ public final class DataFormatException extends RuntimeException {
 	}
 	
 	
+	/*---- Function ----*/
+	
 	/* 
 	 * Always throws, never returns. Use this shorter form whenever possible:
 	 *     DataFormatException.throwUnexpectedEnd();
@@ -46,7 +48,7 @@ public final class DataFormatException extends RuntimeException {
 	}
 	
 	
-	/*---- Methods ----*/
+	/*---- Method ----*/
 	
 	public Reason getReason() {
 		return reason;
