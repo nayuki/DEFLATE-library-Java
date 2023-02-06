@@ -9,64 +9,58 @@
 package io.nayuki.deflate;
 
 import java.io.ByteArrayOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
+import io.nayuki.deflate.DataFormatException.Reason;
 
 
 public final class InflaterInputStreamTest {
 	
 	/*---- Block header ----*/
 	
-	@Test(expected=EOFException.class)
-	public void testHeaderEndBeforeFinal() throws IOException {
-		test("",
-			null);
+	@Test public void testHeaderEndBeforeFinal() throws IOException {
+		testFail("",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testHeaderEndBeforeType() throws IOException {
+	@Test public void testHeaderEndBeforeType() throws IOException {
 		// Fixed Huffman block: 90 91 92 93 94 End
-		test("0 10 110010000 110010001 110010010 110010011 110010100 0000000"
+		testFail("0 10 110010000 110010001 110010010 110010011 110010100 0000000"
 			+ "1",
-			null);
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testHeaderEndInType() throws IOException {
+	@Test public void testHeaderEndInType() throws IOException {
 		// Fixed Huffman block: 95 96 97 98 End
-		test("0 10 110010101 110010110 110010111 110011000 0000000"
+		testFail("0 10 110010101 110010110 110010111 110011000 0000000"
 			+ "1 0",
-			null);
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
 	
 	/*---- Block type 0b00 ----*/
 	
-	@Test
-	public void testUncompressedEmpty() throws IOException {
+	@Test public void testUncompressedEmpty() throws IOException {
 		// Uncompressed block len=0: (empty)
 		test("1 00 00000   0000000000000000 1111111111111111",
 			"");
 	}
 	
 	
-	@Test
-	public void testUncompressedThreeBytes() throws IOException {
+	@Test public void testUncompressedThreeBytes() throws IOException {
 		// Uncompressed block len=3: 05 14 23
 		test("1 00 00000   1100000000000000 0011111111111111   10100000 00101000 11000100",
 			"05 14 23");
 	}
 	
 	
-	@Test
-	public void testUncompressedTwoBlocks() throws IOException {
+	@Test public void testUncompressedTwoBlocks() throws IOException {
 		// Uncompressed block len=1: 05
 		// Uncompressed block len=2: 14 23
 		test("0 00 00000   0100000000000000 1011111111111111   10100000 00101000   1 00 00000   1000000000000000 0111111111111111   11000100",
@@ -74,65 +68,57 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testUncompressedEndBeforeLength() throws IOException {
+	@Test public void testUncompressedEndBeforeLength() throws IOException {
 		// Uncompressed block (partial padding) (no length)
-		test("1 00 000",
-			null);
+		testFail("1 00 000",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testUncompressedEndInLength() throws IOException {
+	@Test public void testUncompressedEndInLength() throws IOException {
 		// Uncompressed block (partial length)
-		test("1 00 00000 0000000000",
-			null);
+		testFail("1 00 00000 0000000000",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testUncompressedEndInNegatedLength() throws IOException {
+	@Test public void testUncompressedEndInNegatedLength() throws IOException {
 		// Uncompressed block (len) (partial nlen)
-		test("1 00 00000 0000000000000000 11111111",
-			null);
+		testFail("1 00 00000 0000000000000000 11111111",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testUncompressedLengthNegatedMismatch() throws IOException {
+	@Test public void testUncompressedLengthNegatedMismatch() throws IOException {
 		// Uncompressed block (mismatched len and nlen)
-		test("1 00 00000 0010000000010000 1111100100110101",
-			null);
+		testFail("1 00 00000 0010000000010000 1111100100110101",
+			Reason.UNCOMPRESSED_BLOCK_LENGTH_MISMATCH);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testUncompressedEndBeforeData() throws IOException {
+	@Test public void testUncompressedEndBeforeData() throws IOException {
 		// Uncompressed block len=6: (End)
-		test("1 00 11111 0110000000000000 1001111111111111",
-			null);
+		testFail("1 00 11111 0110000000000000 1001111111111111",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testUncompressedEndInData() throws IOException {
+	@Test public void testUncompressedEndInData() throws IOException {
 		// Uncompressed block len=6: 55 EE (End)
-		test("1 00 11111 0110000000000000 1001111111111111 10101010 01110111",
-			null);
+		testFail("1 00 11111 0110000000000000 1001111111111111 10101010 01110111",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testUncompressedEndBeforeFinalBlock() throws IOException {
+	@Test public void testUncompressedEndBeforeFinalBlock() throws IOException {
 		// Uncompressed block len=0: (empty)
 		// No final block
-		test("0 00 00000   0000000000000000 1111111111111111",
-			null);
+		testFail("0 00 00000   0000000000000000 1111111111111111",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test
-	public void testUncompressedAlreadyByteAligned() throws IOException {
+	@Test public void testUncompressedAlreadyByteAligned() throws IOException {
 		// Fixed Huffman block: 90 A1 FF End
 		// Uncompressed block len=2: AB CD
 		test("0 10 110010000 110100001 111111111 0000000  "
@@ -224,32 +210,28 @@ public final class InflaterInputStreamTest {
 	
 	/*---- Block type 0b01 ----*/
 	
-	@Test
-	public void testFixedHuffmanEmpty() throws IOException {
+	@Test public void testFixedHuffmanEmpty() throws IOException {
 		// Fixed Huffman block: End
 		test("1 10 0000000",
 			"");
 	}
 	
 	
-	@Test
-	public void testFixedHuffmanLiterals() throws IOException {
+	@Test public void testFixedHuffmanLiterals() throws IOException {
 		// Fixed Huffman block: 00 80 8F 90 C0 FF End
 		test("1 10 00110000 10110000 10111111 110010000 111000000 111111111 0000000",
 			"00 80 8F 90 C0 FF");
 	}
 	
 	
-	@Test
-	public void testFixedHuffmanNonOverlappingRun() throws IOException {
+	@Test public void testFixedHuffmanNonOverlappingRun() throws IOException {
 		// Fixed Huffman block: 00 01 02 (3,3) End
 		test("1 10 00110000 00110001 00110010 0000001 00010 0000000",
 			"00 01 02 00 01 02");
 	}
 	
 	
-	@Test
-	public void testFixedHuffmanOverlappingRun1() throws IOException {
+	@Test public void testFixedHuffmanOverlappingRun1() throws IOException {
 		// Fixed Huffman block: 01 (1,4) End
 		test("1 10 00110001 0000010 00000 0000000",
 			"01 01 01 01 01");
@@ -264,72 +246,63 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testFixedHuffmanInvalidLengthCode286() throws IOException {
+	@Test public void testFixedHuffmanInvalidLengthCode286() throws IOException {
 		// Fixed Huffman block: #286
-		test("1 10 11000110",
-			null);
+		testFail("1 10 11000110",
+			Reason.RESERVED_LENGTH_SYMBOL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testFixedHuffmanInvalidLengthCode287() throws IOException {
+	@Test public void testFixedHuffmanInvalidLengthCode287() throws IOException {
 		// Fixed Huffman block: #287
-		test("1 10 11000111",
-			null);
+		testFail("1 10 11000111",
+			Reason.RESERVED_LENGTH_SYMBOL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testFixedHuffmanInvalidDistanceCode30() throws IOException {
+	@Test public void testFixedHuffmanInvalidDistanceCode30() throws IOException {
 		// Fixed Huffman block: 00 #257 #30
-		test("1 10 00110000 0000001 11110",
-			null);
+		testFail("1 10 00110000 0000001 11110",
+			Reason.RESERVED_DISTANCE_SYMBOL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testFixedHuffmanInvalidDistanceCode31() throws IOException {
+	@Test public void testFixedHuffmanInvalidDistanceCode31() throws IOException {
 		// Fixed Huffman block: 00 #257 #31
-		test("1 10 00110000 0000001 11111",
-			null);
+		testFail("1 10 00110000 0000001 11111",
+			Reason.RESERVED_DISTANCE_SYMBOL);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testFixedHuffmanEndInSymbol() throws IOException {
+	@Test public void testFixedHuffmanEndInSymbol() throws IOException {
 		// Fixed Huffman block: (partial symbol)
-		test("1 10 00000",
-			null);
+		testFail("1 10 00000",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testFixedHuffmanEndBeforeSymbol() throws IOException {
+	@Test public void testFixedHuffmanEndBeforeSymbol() throws IOException {
 		// Fixed Huffman block: 93 91 94 90 92
-		test("1 10 110010011 110010001 110010100 110010000 110010010",
-			null);
+		testFail("1 10 110010011 110010001 110010100 110010000 110010010",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testFixedHuffmanEofInRunExtensionBits() throws IOException {
+	@Test public void testFixedHuffmanEofInRunExtensionBits() throws IOException {
 		// Fixed Huffman block: 00 #269+1(partial)
-		test("1 10 00110000 0001101 1",
-			null);
+		testFail("1 10 00110000 0001101 1",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test(expected=EOFException.class)
-	public void testFixedHuffmanEofInDistanceExtensionBits() throws IOException {
+	@Test public void testFixedHuffmanEofInDistanceExtensionBits() throws IOException {
 		// Fixed Huffman block: 00 #285 #0 #257 #8+00(partial)
-		test("1 10 00110000 11000101 00000 0000001 01000 00",
-			null);
+		testFail("1 10 00110000 11000101 00000 0000001 01000 00",
+			Reason.UNEXPECTED_END_OF_STREAM);
 	}
 	
 	
-	@Test
-	public void testFixedHuffmanLiteralsRandom() throws IOException {
+	@Test public void testFixedHuffmanLiteralsRandom() throws IOException {
 		final int TRIALS = 100;
 		for (int i = 0; i < TRIALS; i++) {
 			int numBlocks = rand.nextInt(100) + 1;
@@ -367,8 +340,7 @@ public final class InflaterInputStreamTest {
 	
 	/*---- Block type 0b10 ----*/
 	
-	@Test
-	public void testDynamicHuffmanEmpty() throws IOException {
+	@Test public void testDynamicHuffmanEmpty() throws IOException {
 		// Dynamic Huffman block:
 		//   numCodeLen=19
 		//     codeLenCodeLen = 0:0, 1:1, 2:0, ..., 15:0, 16:0, 17:0, 18:1
@@ -386,8 +358,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test
-	public void testDynamicHuffmanEmptyNoDistanceCode() throws IOException {
+	@Test public void testDynamicHuffmanEmptyNoDistanceCode() throws IOException {
 		// Dynamic Huffman block:
 		//   numCodeLen=18
 		//     codeLenCodeLen = 0:2, 1:2, 2:0, ..., 15:0, 16:0, 17:0, 18:1
@@ -405,8 +376,7 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanCodeLengthRepeatAtStart() throws IOException {
+	@Test public void testDynamicHuffmanCodeLengthRepeatAtStart() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=18
 		//   codeLenCodeLen = 0:0, 1:1, 2:0, ..., 15:0, 16:1, 17:0, 18:0
@@ -415,13 +385,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0111";
 		String codeLenCodeLens = "100 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 000 100";
 		String codeLens = "1";
-		test(blockHeader + codeCounts + codeLenCodeLens + codeLens,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + codeLens,
+			Reason.NO_PREVIOUS_CODE_LENGTH_TO_COPY);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanTooManyCodeLengthItems() throws IOException {
+	@Test public void testDynamicHuffmanTooManyCodeLengthItems() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=18
 		//   codeLenCodeLen = 0:0, 1:1, 2:0, ..., 15:0, 16:0, 17:0, 18:1
@@ -430,13 +399,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0111";
 		String codeLenCodeLens = "000 000 100 000 000 000 000 000 000 000 000 000 000 000 000 000 000 100";
 		String codeLens = "0 0 11111111 10011011";
-		test(blockHeader + codeCounts + codeLenCodeLens + codeLens,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + codeLens,
+			Reason.CODE_LENGTH_CODE_OVER_FULL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanOverfullCode0() throws IOException {
+	@Test public void testDynamicHuffmanOverfullCode0() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
 		//   codeLenCodeLen = 0:1, 1:1, 2:1, 3:0
@@ -444,13 +412,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0000";
 		String codeLenCodeLens = "100 100 100 000";
 		String padding = "0000000000000000000";
-		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + padding,
+			Reason.HUFFMAN_CODE_OVER_FULL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanOverfullCode1() throws IOException {
+	@Test public void testDynamicHuffmanOverfullCode1() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
 		//   codeLenCodeLen = 0:1, 1:1, 2:1, 3:1
@@ -458,13 +425,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0000";
 		String codeLenCodeLens = "100 100 100 100";
 		String padding = "0000000000000000000";
-		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + padding,
+			Reason.HUFFMAN_CODE_OVER_FULL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanUnpairedCode() throws IOException {
+	@Test public void testDynamicHuffmanUnpairedCode() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
 		//   codeLenCodeLen = 0:1, 1:2, 2:3, 3:0
@@ -472,13 +438,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0000";
 		String codeLenCodeLens = "100 010 110 000";
 		String padding = "0000000000000000000";
-		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + padding,
+			Reason.HUFFMAN_CODE_UNDER_FULL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanEmptyCode() throws IOException {
+	@Test public void testDynamicHuffmanEmptyCode() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
 		//   codeLenCodeLen = 0:0, 1:0, 2:0, 3:0
@@ -486,13 +451,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0000";
 		String codeLenCodeLens = "000 000 000 000";
 		String padding = "0000000000000000000";
-		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + padding,
+			Reason.HUFFMAN_CODE_UNDER_FULL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanUnderfullCode0() throws IOException {
+	@Test public void testDynamicHuffmanUnderfullCode0() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
 		//   codeLenCodeLen = 0:0, 1:0, 2:1, 3:0
@@ -500,13 +464,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0000";
 		String codeLenCodeLens = "000 000 100 000";
 		String padding = "0000000000000000000";
-		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + padding,
+			Reason.HUFFMAN_CODE_UNDER_FULL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanUnderfullCode1() throws IOException {
+	@Test public void testDynamicHuffmanUnderfullCode1() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=257, numDist=1, numCodeLen=4
 		//   codeLenCodeLen = 0:2, 1:1, 2:0, 3:0
@@ -514,13 +477,12 @@ public final class InflaterInputStreamTest {
 		String codeCounts = "00000 00000 0000";
 		String codeLenCodeLens = "010 100 000 000";
 		String padding = "0000000000000000000";
-		test(blockHeader + codeCounts + codeLenCodeLens + padding,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + padding,
+			Reason.HUFFMAN_CODE_UNDER_FULL);
 	}
 	
 	
-	@Test(expected=DataFormatException.class)
-	public void testDynamicHuffmanUseOfNullDistanceCode() throws IOException {
+	@Test public void testDynamicHuffmanUseOfNullDistanceCode() throws IOException {
 		// Dynamic Huffman block:
 		//   numLitLen=258, numDist=1, numCodeLen=18
 		//   codeLenCodeLen = 0:2, 1:2, 2:2, ..., 15:0, 16:0, 17:0, 18:2
@@ -532,19 +494,18 @@ public final class InflaterInputStreamTest {
 		String codeLens = "10 111111111 110101011 01 10 00";
 		String data = "10 11";
 		String padding = "0000000000000000";
-		test(blockHeader + codeCounts + codeLenCodeLens + codeLens + data + padding,
-			null);
+		testFail(blockHeader + codeCounts + codeLenCodeLens + codeLens + data + padding,
+			Reason.LENGTH_ENCOUNTERED_WITH_EMPTY_DISTANCE_CODE);
 	}
 	
 	
 	
 	/*---- Block type 0b11 ----*/
 	
-	@Test(expected=DataFormatException.class)
-	public void testReservedBlockType() throws IOException {
+	@Test public void testReservedBlockType() throws IOException {
 		// Reserved block type
-		test("1 11 00000",
-			null);
+		testFail("1 11 00000",
+			Reason.RESERVED_BLOCK_TYPE);
 	}
 	
 	
@@ -612,6 +573,15 @@ public final class InflaterInputStreamTest {
 			bout.write(buf, off, n);
 		}
 		Assert.assertArrayEquals(refOut, bout.toByteArray());
+	}
+	
+	
+	private static void testFail(String inputBits, Reason reason) throws IOException {
+		try {
+			test(inputBits, null);
+		} catch (DataFormatException e) {
+			Assert.assertEquals(reason, e.getReason());
+		}
 	}
 	
 	

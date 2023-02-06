@@ -10,10 +10,12 @@ package io.nayuki.deflate;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 import java.util.zip.Adler32;
+import io.nayuki.deflate.DataFormatException.Reason;
 
 
 public final class ZlibInputStream extends InputStream {
@@ -67,8 +69,14 @@ public final class ZlibInputStream extends InputStream {
 			checksum.update(b, off, result);
 		else {
 			decompressedInput = null;
-			if ((int)checksum.getValue() != new DataInputStream(rawInput).readInt())
-				throw new DataFormatException("Decompression Adler-32 mismatch");
+			int expectChecksum;
+			try {
+				expectChecksum = new DataInputStream(rawInput).readInt();
+			} catch (EOFException e) {
+				throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+			}
+			if ((int)checksum.getValue() != expectChecksum)
+				throw new DataFormatException(Reason.DECOMPRESSED_CHECKSUM_MISMATCH, "Decompression Adler-32 mismatch");
 			checksum = null;
 		}
 		return result;

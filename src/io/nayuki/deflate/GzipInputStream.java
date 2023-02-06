@@ -11,10 +11,12 @@ package io.nayuki.deflate;
 import java.io.BufferedInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 import java.util.zip.CRC32;
+import io.nayuki.deflate.DataFormatException.Reason;
 
 
 public final class GzipInputStream extends InputStream {
@@ -70,12 +72,19 @@ public final class GzipInputStream extends InputStream {
 			checksum.update(b, off, result);
 		} else {
 			decompressedInput = null;
+			int expectChecksum, expectLength;
 			DataInput din = new DataInputStream(rawInput);
-			if ((int)checksum.getValue() != Integer.reverseBytes(din.readInt()))
-				throw new DataFormatException("Decompression CRC-32 mismatch");
+			try {
+				expectChecksum = Integer.reverseBytes(din.readInt());
+				expectLength = Integer.reverseBytes(din.readInt());
+			} catch (EOFException e) {
+				throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+			}
+			if ((int)checksum.getValue() != expectChecksum)
+				throw new DataFormatException(Reason.DECOMPRESSED_CHECKSUM_MISMATCH, "Decompression CRC-32 mismatch");
 			checksum = null;
-			if ((int)decompressedLength != Integer.reverseBytes(din.readInt()))
-				throw new DataFormatException("Decompressed size mismatch");
+			if ((int)decompressedLength != expectLength)
+				throw new DataFormatException(Reason.DECOMPRESSED_SIZE_MISMATCH, "Decompressed size mismatch");
 		}
 		return result;
 	}

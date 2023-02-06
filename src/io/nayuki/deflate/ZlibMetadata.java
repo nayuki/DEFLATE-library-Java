@@ -8,12 +8,12 @@
 
 package io.nayuki.deflate;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Objects;
 import java.util.Optional;
+import io.nayuki.deflate.DataFormatException.Reason;
 
 
 public record ZlibMetadata(
@@ -49,15 +49,15 @@ public record ZlibMetadata(
 		int cmf = in.read();
 		int flg = in.read();
 		if (flg == -1)
-			throw new EOFException("Unexpected end of stream");
+			throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
 		if ((cmf << 8 | flg) % CHECKSUM_MODULUS != 0)
-			throw new DataFormatException("Header checksum mismatch");
+			throw new DataFormatException(Reason.HEADER_CHECKSUM_MISMATCH, "Header checksum mismatch");
 		
 		int compMethodInt = cmf & 0xF;
 		CompressionMethod compMethod = switch (compMethodInt) {
 			case  8 -> CompressionMethod.DEFLATE;
 			case 15 -> CompressionMethod.RESERVED;
-			default -> throw new DataFormatException("Unsupported compression method: " + compMethodInt);
+			default -> throw new DataFormatException(Reason.UNSUPPORTED_COMPRESSION_METHOD, "Unsupported compression method: " + compMethodInt);
 		};
 		
 		int compInfo = cmf >>> 4;
@@ -68,7 +68,7 @@ public record ZlibMetadata(
 			for (int i = 0; i < 4; i++) {
 				int b = in.read();
 				if (b == -1)
-					throw new EOFException("Unexpected end of stream");
+					throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
 				val = (val << 8) | b;
 			}
 			presetDict = Optional.of(val);

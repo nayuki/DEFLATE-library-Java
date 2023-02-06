@@ -17,6 +17,7 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Optional;
 import io.nayuki.deflate.DataFormatException;
+import io.nayuki.deflate.DataFormatException.Reason;
 
 
 public final class Open implements State {
@@ -92,7 +93,7 @@ public final class Open implements State {
 					case 0 -> new UncompressedBlock();
 					case 1 -> new HuffmanBlock(false);
 					case 2 -> new HuffmanBlock(true);
-					case 3 -> throw new DataFormatException("Reserved block type");
+					case 3 -> throw new DataFormatException(Reason.RESERVED_BLOCK_TYPE, "Reserved block type");
 					default -> throw new AssertionError("Unreachable value");
 				});
 			}
@@ -115,7 +116,11 @@ public final class Open implements State {
 		input.reset();
 		int skip = inputBuffer.position() - (inputBitBuffer0Length + inputBitBuffer1Length) / 8;
 		assert skip >= 0;
-		new DataInputStream(input).skipNBytes(skip);
+		try {
+			new DataInputStream(input).skipNBytes(skip);
+		} catch (EOFException e) {
+			throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+		}
 	}
 	
 	
@@ -179,7 +184,7 @@ public final class Open implements State {
 			input.mark(inputBuffer.capacity());
 		int n = input.read(inputBuffer.array());
 		if (n == -1)
-			throw new EOFException("Unexpected end of stream");
+			throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
 		else if (n == 0)
 			throw new AssertionError("read() returned zero bytes");
 		else
@@ -232,7 +237,7 @@ public final class Open implements State {
 			numRemainingBytes = readBits(16);
 			assert 0x0000 <= numRemainingBytes && numRemainingBytes <= 0xFFFF;
 			if (numRemainingBytes != (readBits(16) ^ 0xFFFF))
-				throw new DataFormatException("len/nlen mismatch in uncompressed block");
+				throw new DataFormatException(Reason.UNCOMPRESSED_BLOCK_LENGTH_MISMATCH, "len/nlen mismatch in uncompressed block");
 		}
 		
 		
@@ -272,7 +277,7 @@ public final class Open implements State {
 				do {
 					int n = input.read(b, index, end - index);
 					if (n == -1)
-						throw new EOFException("Unexpected end of stream");
+						throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
 					index += n;
 				} while (index < end);
 				if (endExactly)
@@ -352,7 +357,7 @@ public final class Open implements State {
 						int runLen = switch (sym) {
 							case 16 -> {
 								if (runVal == -1)
-									throw new DataFormatException("No code length value to copy");
+									throw new DataFormatException(Reason.NO_PREVIOUS_CODE_LENGTH_TO_COPY, "No code length value to copy");
 								yield readBits(2) + 3;
 							}
 							case 17 -> {
@@ -367,7 +372,7 @@ public final class Open implements State {
 						};
 						for (; runLen > 0; runLen--, i++) {
 							if (i >= codeLens.length)
-								throw new DataFormatException("Run exceeds number of codes");
+								throw new DataFormatException(Reason.CODE_LENGTH_CODE_OVER_FULL, "Run exceeds number of codes");
 							codeLens[i] = runVal;
 						}
 					}
@@ -376,7 +381,7 @@ public final class Open implements State {
 				// Create literal-length code tree
 				byte[] litLenCodeLen = Arrays.copyOf(codeLens, numLitLenCodes);
 				if (litLenCodeLen[256] == 0)
-					throw new DataFormatException("End-of-block symbol has zero code length");
+					throw new DataFormatException(Reason.END_OF_BLOCK_CODE_ZERO_LENGTH, "End-of-block symbol has zero code length");
 				literalLengthCodeTree = codeLengthsToCodeTree(litLenCodeLen);
 				literalLengthCodeTable = codeTreeToCodeTable(literalLengthCodeTree);
 				int maxBitsPerLitLen = 0;
@@ -508,7 +513,7 @@ public final class Open implements State {
 							try {
 								temp = RUN_LENGTH_TABLE[sym - 257];
 							} catch (ArrayIndexOutOfBoundsException e) {
-								throw new DataFormatException("Reserved run length symbol: " + sym);
+								throw new DataFormatException(Reason.RESERVED_LENGTH_SYMBOL, "Reserved run length symbol: " + sym);
 							}
 							run = temp >>> 3;
 							int numExtraBits = temp & 7;
@@ -519,7 +524,7 @@ public final class Open implements State {
 						
 						// Decode next distance symbol (a customized version of decodeSymbol())
 						if (distanceCodeTree == null)
-							throw new DataFormatException("Length symbol encountered with empty distance code");
+							throw new DataFormatException(Reason.LENGTH_ENCOUNTERED_WITH_EMPTY_DISTANCE_CODE, "Length symbol encountered with empty distance code");
 						final int distSym;
 						{
 							int temp = distanceCodeTable[(int)inputBitBuffer0 & CODE_TABLE_MASK];
@@ -542,7 +547,7 @@ public final class Open implements State {
 							try {
 								temp = DISTANCE_TABLE[distSym];
 							} catch (ArrayIndexOutOfBoundsException e) {
-								throw new DataFormatException("Reserved distance symbol: " + distSym);
+								throw new DataFormatException(Reason.RESERVED_DISTANCE_SYMBOL, "Reserved distance symbol: " + distSym);
 							}
 							dist = temp >>> 4;
 							int numExtraBits = temp & 0xF;
@@ -571,7 +576,7 @@ public final class Open implements State {
 					} else if (sym > 256) {  // Length and distance for copying
 						run = decodeRunLength(sym);
 						if (distanceCodeTree == null)
-							throw new DataFormatException("Length symbol encountered with empty distance code");
+							throw new DataFormatException(Reason.LENGTH_ENCOUNTERED_WITH_EMPTY_DISTANCE_CODE, "Length symbol encountered with empty distance code");
 						int distSym = decodeSymbol(distanceCodeTree);
 						assert 0 <= distSym && distSym <= 31;
 						dist = decodeDistance(distSym);
@@ -585,7 +590,7 @@ public final class Open implements State {
 				assert 3 <= run && run <= MAX_RUN_LENGTH;
 				assert 1 <= dist && dist <= 32768;
 				if (dist > dictionaryLength)
-					throw new DataFormatException("Attempting to copy from before start of dictionary");
+					throw new DataFormatException(Reason.COPY_FROM_BEFORE_DICTIONARY_START, "Attempting to copy from before start of dictionary");
 				int dictReadIndex = (dictionaryIndex - dist) & DICTIONARY_MASK;
 				if (run <= end - index) {  // Nice case with less branching
 					for (int i = 0; i < run; i++) {
@@ -651,7 +656,7 @@ public final class Open implements State {
 				int temp = RUN_LENGTH_TABLE[sym - 257];
 				return (temp >>> 3) + readBits(temp & 7);
 			} catch (ArrayIndexOutOfBoundsException e) {
-				throw new DataFormatException("Reserved run length symbol: " + sym);
+				throw new DataFormatException(Reason.RESERVED_LENGTH_SYMBOL, "Reserved run length symbol: " + sym);
 			}
 		}
 		
@@ -666,7 +671,7 @@ public final class Open implements State {
 				int temp = DISTANCE_TABLE[sym];
 				return (temp >>> 4) + readBits(temp & 0xF);
 			} catch (ArrayIndexOutOfBoundsException e) {
-				throw new DataFormatException("Reserved distance symbol: " + sym);
+				throw new DataFormatException(Reason.RESERVED_DISTANCE_SYMBOL, "Reserved distance symbol: " + sym);
 			}
 		}
 		
@@ -718,7 +723,7 @@ public final class Open implements State {
 			
 			int numCodes = codeLengthsAndSymbols.length - codeLenSymIndex;
 			if (numCodes < 2)
-				throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
+				throw new DataFormatException(Reason.HUFFMAN_CODE_UNDER_FULL, "This canonical code produces an under-full Huffman code tree");
 			if (numCodes > 16385)  // Because some indexes would overflow int16
 				throw new IllegalArgumentException("Too many codes");
 			
@@ -732,13 +737,13 @@ public final class Open implements State {
 					// Double every open slot
 					for (int end = resultEnd; resultNext < end; resultNext++) {
 						if (resultEnd >= result.length)
-							throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
+							throw new DataFormatException(Reason.HUFFMAN_CODE_UNDER_FULL, "This canonical code produces an under-full Huffman code tree");
 						result[resultNext] = (short)resultEnd;
 						resultEnd += 2;
 					}
 				}
 				if (resultNext >= resultEnd)
-					throw new DataFormatException("This canonical code produces an over-full Huffman code tree");
+					throw new DataFormatException(Reason.HUFFMAN_CODE_OVER_FULL, "This canonical code produces an over-full Huffman code tree");
 				int symbol = pair & ((1 << 11) - 1);
 				result[resultNext] = (short)~symbol;
 				resultNext++;
@@ -746,7 +751,7 @@ public final class Open implements State {
 			if (resultEnd != result.length)
 				throw new AssertionError("Unreachable state");
 			if (resultNext < resultEnd)
-				throw new DataFormatException("This canonical code produces an under-full Huffman code tree");
+				throw new DataFormatException(Reason.HUFFMAN_CODE_UNDER_FULL, "This canonical code produces an under-full Huffman code tree");
 			return result;
 		}
 		
