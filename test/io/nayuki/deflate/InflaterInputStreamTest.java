@@ -22,7 +22,7 @@ public final class InflaterInputStreamTest {
 	/*---- No blocks ----*/
 	
 	@Test(expected=EOFException.class)
-	public void testEofStartOfBlock() throws IOException {
+	public void testHeaderEndBeforeFinal() throws IOException {
 		// No blocks
 		test("",
 			null);
@@ -30,7 +30,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=EOFException.class)
-	public void testEofInBlockType() throws IOException {
+	public void testHeaderEndInType() throws IOException {
 		// Partial block type
 		test("1 0",
 			null);
@@ -66,7 +66,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=EOFException.class)
-	public void testUncompressedEofBeforeLength() throws IOException {
+	public void testUncompressedEndBeforeLength() throws IOException {
 		// Uncompressed block (partial padding) (no length)
 		test("1 00 000",
 			null);
@@ -74,7 +74,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=EOFException.class)
-	public void testUncompressedEofInLength() throws IOException {
+	public void testUncompressedEndInLength() throws IOException {
 		// Uncompressed block (partial length)
 		test("1 00 00000 0000000000",
 			null);
@@ -82,7 +82,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=DataFormatException.class)
-	public void testUncompressedMismatchedLength() throws IOException {
+	public void testUncompressedLengthNegatedMismatch() throws IOException {
 		// Uncompressed block (mismatched len and nlen)
 		test("1 00 00000 0010000000010000 1111100100110101",
 			null);
@@ -90,7 +90,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=EOFException.class)
-	public void testUncompressedEofInData() throws IOException {
+	public void testUncompressedEndInData() throws IOException {
 		// Uncompressed block len=6: 55 EE (End)
 		test("1 00 11111 0110000000000000 1001111111111111 10101010 01110111",
 			null);
@@ -98,7 +98,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=EOFException.class)
-	public void testUncompressedBlockNoFinalBlock() throws IOException {
+	public void testUncompressedEndBeforeFinalBlock() throws IOException {
 		// Uncompressed block len=0: (empty)
 		// No final block
 		test("0 00 00000   0000000000000000 1111111111111111",
@@ -107,7 +107,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test
-	public void testUncompressedBlockNoDiscardBits() throws IOException {
+	public void testUncompressedAlreadyByteAligned() throws IOException {
 		// Fixed Huffman block: 90 A1 FF End
 		// Uncompressed block len=2: AB CD
 		test("0 10 110010000 110100001 111111111 0000000  1 00 0100000000000000 1011111111111111 11010101 10110011",
@@ -221,7 +221,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test
-	public void testFixedHuffmanOverlappingRun0() throws IOException {
+	public void testFixedHuffmanOverlappingRun1() throws IOException {
 		// Fixed Huffman block: 01 (1,4) End
 		test("1 10 00110001 0000010 00000 0000000",
 			"01 01 01 01 01");
@@ -229,7 +229,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test
-	public void testFixedHuffmanOverlappingRun1() throws IOException {
+	public void testFixedHuffmanOverlappingRun2() throws IOException {
 		// Fixed Huffman block: 8E 8F (2,5) End
 		test("1 10 10111110 10111111 0000011 00001 0000000",
 			"8E 8F 8E 8F 8E 8F 8E");
@@ -269,7 +269,7 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=EOFException.class)
-	public void testFixedHuffmanEofInHuffmanSymbol() throws IOException {
+	public void testFixedHuffmanEndInSymbol() throws IOException {
 		// Fixed Huffman block: (partial symbol)
 		test("1 10 00000",
 			null);
