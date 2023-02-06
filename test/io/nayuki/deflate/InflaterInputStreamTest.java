@@ -529,7 +529,16 @@ public final class InflaterInputStreamTest {
 			};
 		}
 		
-		// Perform decompression with single-byte reads
+		// Convert the reference output hex string
+		Objects.requireNonNull(refOutputHex);
+		refOutputHex = refOutputHex.replace(" ", "");
+		if (refOutputHex.length() % 2 != 0)
+			throw new IllegalArgumentException();
+		var refOut = new byte[refOutputHex.length() / 2];
+		for (int i = 0; i < refOut.length; i++)
+			refOut[i] = (byte)Integer.parseInt(refOutputHex.substring(i * 2, (i + 1) * 2), 16);
+		
+		// Perform decompression with single-byte reads and check output
 		var bout = new ByteArrayOutputStream();
 		var sin = new StringInputStream(inputBits);
 		@SuppressWarnings("resource")
@@ -542,17 +551,6 @@ public final class InflaterInputStreamTest {
 		}
 		if (sin.read() != -1)
 			throw new IllegalArgumentException();
-		
-		// Convert the reference hex string
-		Objects.requireNonNull(refOutputHex);
-		refOutputHex = refOutputHex.replace(" ", "");
-		if (refOutputHex.length() % 2 != 0)
-			throw new IllegalArgumentException();
-		var refOut = new byte[refOutputHex.length() / 2];
-		for (int i = 0; i < refOut.length; i++)
-			refOut[i] = (byte)Integer.parseInt(refOutputHex.substring(i * 2, (i + 1) * 2), 16);
-		
-		// Check decompressed output
 		Assert.assertArrayEquals(refOut, bout.toByteArray());
 		
 		// Perform decompression with block reads and check output
@@ -578,7 +576,7 @@ public final class InflaterInputStreamTest {
 	
 	private static void testFail(String inputBits, Reason reason) throws IOException {
 		try {
-			test(inputBits, null);
+			test(inputBits, "");
 		} catch (DataFormatException e) {
 			Assert.assertEquals(reason, e.getReason());
 		}
