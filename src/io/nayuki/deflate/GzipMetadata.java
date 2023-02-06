@@ -141,7 +141,7 @@ public record GzipMetadata(
 				operSystem, extraField, fileName, comment, hasHeaderCrc);
 			
 		} catch (EOFException e) {
-			throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+			throw DataFormatException.throwUnexpectedEnd();
 		}
 	}
 	

@@ -78,7 +78,7 @@ public final class GzipInputStream extends InputStream {
 				expectChecksum = Integer.reverseBytes(din.readInt());
 				expectLength = Integer.reverseBytes(din.readInt());
 			} catch (EOFException e) {
-				throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+				throw DataFormatException.throwUnexpectedEnd();
 			}
 			if ((int)checksum.getValue() != expectChecksum)
 				throw new DataFormatException(Reason.DECOMPRESSED_CHECKSUM_MISMATCH, "Decompression CRC-32 mismatch");

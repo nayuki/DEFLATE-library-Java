@@ -27,6 +27,25 @@ public final class DataFormatException extends RuntimeException {
 	}
 	
 	
+	/* 
+	 * Always throws, never returns. Use this shorter form whenever possible:
+	 *     DataFormatException.throwUnexpectedEnd();
+	 * Otherwise if definite control flow manipulation is needed, then use:
+	 *     int foo;
+	 *     try {
+	 *         foo = bar();
+	 *     } catch (EOFException e) {
+	 *         throw DataFormatException.throwUnexpectedEnd();
+	 *     }
+	 *     print(foo);
+	 */
+	public static DataFormatException throwUnexpectedEnd() {
+		throw new DataFormatException(
+			Reason.UNEXPECTED_END_OF_STREAM,
+			"Unexpected end of stream");
+	}
+	
+	
 	/*---- Methods ----*/
 	
 	public Reason getReason() {

@@ -49,7 +49,7 @@ public record ZlibMetadata(
 		int cmf = in.read();
 		int flg = in.read();
 		if (flg == -1)
-			throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+			DataFormatException.throwUnexpectedEnd();
 		if ((cmf << 8 | flg) % CHECKSUM_MODULUS != 0)
 			throw new DataFormatException(Reason.HEADER_CHECKSUM_MISMATCH, "Header checksum mismatch");
 		
@@ -68,7 +68,7 @@ public record ZlibMetadata(
 			for (int i = 0; i < 4; i++) {
 				int b = in.read();
 				if (b == -1)
-					throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+					DataFormatException.throwUnexpectedEnd();
 				val = (val << 8) | b;
 			}
 			presetDict = Optional.of(val);

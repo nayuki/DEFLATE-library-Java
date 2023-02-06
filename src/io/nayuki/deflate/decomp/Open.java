@@ -119,7 +119,7 @@ public final class Open implements State {
 		try {
 			new DataInputStream(input).skipNBytes(skip);
 		} catch (EOFException e) {
-			throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+			DataFormatException.throwUnexpectedEnd();
 		}
 	}
 	
@@ -184,7 +184,7 @@ public final class Open implements State {
 			input.mark(inputBuffer.capacity());
 		int n = input.read(inputBuffer.array());
 		if (n == -1)
-			throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+			DataFormatException.throwUnexpectedEnd();
 		else if (n == 0)
 			throw new AssertionError("read() returned zero bytes");
 		else
@@ -277,7 +277,7 @@ public final class Open implements State {
 				do {
 					int n = input.read(b, index, end - index);
 					if (n == -1)
-						throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+						DataFormatException.throwUnexpectedEnd();
 					index += n;
 				} while (index < end);
 				if (endExactly)

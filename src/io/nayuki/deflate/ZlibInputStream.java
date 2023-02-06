@@ -73,7 +73,7 @@ public final class ZlibInputStream extends InputStream {
 			try {
 				expectChecksum = new DataInputStream(rawInput).readInt();
 			} catch (EOFException e) {
-				throw new DataFormatException(Reason.UNEXPECTED_END_OF_STREAM, "Unexpected end of stream");
+				throw DataFormatException.throwUnexpectedEnd();
 			}
 			if ((int)checksum.getValue() != expectChecksum)
 				throw new DataFormatException(Reason.DECOMPRESSED_CHECKSUM_MISMATCH, "Decompression Adler-32 mismatch");
