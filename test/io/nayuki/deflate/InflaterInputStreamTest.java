@@ -19,18 +19,12 @@ import org.junit.Test;
 
 public final class InflaterInputStreamTest {
 	
+	/*---- No blocks ----*/
+	
 	@Test(expected=EOFException.class)
 	public void testEofStartOfBlock() throws IOException {
 		// No blocks
 		test("",
-			null);
-	}
-	
-	
-	@Test(expected=DataFormatException.class)
-	public void testReservedBlockType() throws IOException {
-		// Reserved block type
-		test("1 11 00000",
 			null);
 	}
 	
@@ -42,6 +36,9 @@ public final class InflaterInputStreamTest {
 			null);
 	}
 	
+	
+	
+	/*---- Block type 0b00 ----*/
 	
 	@Test
 	public void testUncompressedEmpty() throws IOException {
@@ -196,6 +193,9 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
+	
+	/*---- Block type 0b01 ----*/
+	
 	@Test
 	public void testFixedHuffmanEmpty() throws IOException {
 		// Fixed Huffman block: End
@@ -291,6 +291,9 @@ public final class InflaterInputStreamTest {
 			null);
 	}
 	
+	
+	
+	/*---- Block type 0b10 ----*/
 	
 	@Test
 	public void testDynamicHuffmanEmpty() throws IOException {
@@ -463,7 +466,18 @@ public final class InflaterInputStreamTest {
 	
 	
 	
-	/* Utility method */
+	/*---- Block type 0b11 ----*/
+	
+	@Test(expected=DataFormatException.class)
+	public void testReservedBlockType() throws IOException {
+		// Reserved block type
+		test("1 11 00000",
+			null);
+	}
+	
+	
+	
+	/*---- Utilities ----*/
 	
 	// `inputBits` has 0s and 1s, and optional spaces; its length need not be
 	// a multiple of 8. `refOutputHex` has pairs of hexadecimal digits (with
