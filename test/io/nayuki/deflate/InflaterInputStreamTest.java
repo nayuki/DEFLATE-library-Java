@@ -328,6 +328,42 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
+	@Test
+	public void testFixedHuffmanLiteralsRandom() throws IOException {
+		final int TRIALS = 100;
+		for (int i = 0; i < TRIALS; i++) {
+			int numBlocks = rand.nextInt(100) + 1;
+			var inBits = new StringBuilder();
+			var outBytes = new StringBuilder();
+			for (int j = 0; j < numBlocks; j++) {
+				inBits.append(j + 1 < numBlocks ? "0" : "1");  // bfinal
+				inBits.append("10");  // btype
+				
+				// A quasi log-uniform distribution
+				int len = rand.nextInt(16);
+				if (len > 0) {
+					len = 1 << (len - 1);
+					len |= rand.nextInt(len);
+				}
+				
+				for (int k = 0; k < len; k++) {
+					int b = rand.nextInt(256);
+					if (b < 144) {
+						for (int l = 7; l >= 0; l--)
+							inBits.append(((b - 0 + 48) >>> l) & 1);
+					} else {
+						for (int l = 8; l >= 0; l--)
+							inBits.append(((b - 144 + 400) >>> l) & 1);
+					}
+					outBytes.append(String.format("%02x", b));
+				}
+				inBits.append("0000000");
+			}
+			test(inBits.toString(), outBytes.toString());
+		}
+	}
+	
+	
 	
 	/*---- Block type 0b10 ----*/
 	
