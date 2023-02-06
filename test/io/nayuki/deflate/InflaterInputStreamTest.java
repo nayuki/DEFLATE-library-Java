@@ -19,11 +19,10 @@ import org.junit.Test;
 
 public final class InflaterInputStreamTest {
 	
-	/*---- No blocks ----*/
+	/*---- Block header ----*/
 	
 	@Test(expected=EOFException.class)
 	public void testHeaderEndBeforeFinal() throws IOException {
-		// No blocks
 		test("",
 			null);
 	}
@@ -31,8 +30,9 @@ public final class InflaterInputStreamTest {
 	
 	@Test(expected=EOFException.class)
 	public void testHeaderEndInType() throws IOException {
-		// Partial block type
-		test("1 0",
+		// Fixed Huffman block: 95 96 97 98 End
+		test("0 10 110010101 110010110 110010111 110011000 0000000"
+			+ "1 0",
 			null);
 	}
 	
@@ -110,7 +110,8 @@ public final class InflaterInputStreamTest {
 	public void testUncompressedAlreadyByteAligned() throws IOException {
 		// Fixed Huffman block: 90 A1 FF End
 		// Uncompressed block len=2: AB CD
-		test("0 10 110010000 110100001 111111111 0000000  1 00 0100000000000000 1011111111111111 11010101 10110011",
+		test("0 10 110010000 110100001 111111111 0000000  "
+			+ "1 00 0100000000000000 1011111111111111 11010101 10110011",
 			"90 A1 FF AB CD");
 	}
 	
@@ -127,6 +128,7 @@ public final class InflaterInputStreamTest {
 				for (int k = 0; k < 5; k++)  // Padding
 					inBits.append(rand.nextInt(2));
 				
+				// A quasi log-uniform distribution
 				int len = rand.nextInt(17);
 				if (len > 0) {
 					len = 1 << (len - 1);
@@ -162,6 +164,7 @@ public final class InflaterInputStreamTest {
 					while (inBits.length() % 8 != 0)  // Padding
 						inBits.append(rand.nextInt(2));
 					
+					// A quasi log-uniform distribution
 					int len = rand.nextInt(17);
 					if (len > 0) {
 						len = 1 << (len - 1);
