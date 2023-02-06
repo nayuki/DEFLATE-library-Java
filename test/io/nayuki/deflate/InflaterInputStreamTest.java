@@ -29,6 +29,15 @@ public final class InflaterInputStreamTest {
 	
 	
 	@Test(expected=EOFException.class)
+	public void testHeaderEndBeforeType() throws IOException {
+		// Fixed Huffman block: 90 91 92 93 94 End
+		test("0 10 110010000 110010001 110010010 110010011 110010100 0000000"
+			+ "1",
+			null);
+	}
+	
+	
+	@Test(expected=EOFException.class)
 	public void testHeaderEndInType() throws IOException {
 		// Fixed Huffman block: 95 96 97 98 End
 		test("0 10 110010101 110010110 110010111 110011000 0000000"
@@ -81,10 +90,26 @@ public final class InflaterInputStreamTest {
 	}
 	
 	
+	@Test(expected=EOFException.class)
+	public void testUncompressedEndInNegatedLength() throws IOException {
+		// Uncompressed block (len) (partial nlen)
+		test("1 00 00000 0000000000000000 11111111",
+			null);
+	}
+	
+	
 	@Test(expected=DataFormatException.class)
 	public void testUncompressedLengthNegatedMismatch() throws IOException {
 		// Uncompressed block (mismatched len and nlen)
 		test("1 00 00000 0010000000010000 1111100100110101",
+			null);
+	}
+	
+	
+	@Test(expected=EOFException.class)
+	public void testUncompressedEndBeforeData() throws IOException {
+		// Uncompressed block len=6: (End)
+		test("1 00 11111 0110000000000000 1001111111111111",
 			null);
 	}
 	
@@ -275,6 +300,14 @@ public final class InflaterInputStreamTest {
 	public void testFixedHuffmanEndInSymbol() throws IOException {
 		// Fixed Huffman block: (partial symbol)
 		test("1 10 00000",
+			null);
+	}
+	
+	
+	@Test(expected=EOFException.class)
+	public void testFixedHuffmanEndBeforeSymbol() throws IOException {
+		// Fixed Huffman block: 93 91 94 90 92
+		test("1 10 110010011 110010001 110010100 110010000 110010010",
 			null);
 	}
 	
